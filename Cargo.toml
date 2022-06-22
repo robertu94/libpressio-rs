@@ -1,0 +1,15 @@
+[package]
+name = "libpressio-rs"
+version = "0.1.0"
+authors = ["Robert Underwood <rr.underwood94@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ndarray = "0.14.0"
+libc = "0.2.86"
+
+[build-dependencies]
+bindgen = "0.53.1"
+pkg-config = "0.3.19"
