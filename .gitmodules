@@ -1,3 +1,6 @@
 [submodule "libpressio-sys/libpressio"]
 	path = libpressio-sys/libpressio
 	url = https://github.com/robertu94/libpressio.git
+[submodule "libpressio-sys/std_compat"]
+	path = libpressio-sys/std_compat
+	url = https://github.com/robertu94/std_compat
