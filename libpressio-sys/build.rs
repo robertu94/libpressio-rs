@@ -42,7 +42,7 @@ fn main() {
 
     println!(
         "cargo:rustc-link-search=native={}",
-        libpressio_out.join("lib64").display()
+        libpressio_out.display()
     );
     println!("cargo:rustc-link-lib=static=libpressio");
     eprintln!("include dir {}", libpressio_out.join("include").display());
