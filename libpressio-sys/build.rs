@@ -49,13 +49,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     //disable testing to avoid google-test dependency
     stdcompat_config.define("BUILD_TESTING", "OFF");
     // require a C++17 compiler (e.g. gcc 12 or later) for now
-    // this includes Ubuntu 24.04 and later, Fedora, Nyx, et al 
+    // this includes Ubuntu 24.04 and later, Fedora, Nyx, et al
     // https://robertu94.github.io/guides/dependencies
     stdcompat_config.define("STDCOMPAT_CXX_VERSION", "17");
     stdcompat_config.define("STDCOMPAT_CXX_UNSTABLE", "ON");
     stdcompat_config.define("STD_COMPAT_BOOST_REQUIRED", "OFF");
     let stdcompat_out = stdcompat_config.build();
-    println!("cargo:rustc-link-search=native={}", stdcompat_out.display());
+    println!(
+        "cargo::rustc-link-search=native={}",
+        stdcompat_out.display()
+    );
 
     // ---------------------------------------------------------
     // Configure libpressio
@@ -63,17 +66,33 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut config = cmake::Config::new("libpressio");
     config.define("BUILD_SHARED_LIBS", "OFF");
     config.define("BUILD_TESTING", "OFF");
-    config.define("LIBPRESSIO_HAS_OPENMP", "ON");
+    config.define(
+        "LIBPRESSIO_HAS_OPENMP",
+        if cfg!(feature = "openmp") {
+            "ON"
+        } else {
+            "OFF"
+        },
+    );
     config.define("CMAKE_PREFIX_PATH", stdcompat_out);
     let libpressio_out = config.build();
 
-    println!("cargo:rustc-link-search=native={}", libpressio_out.join("lib64").display());
     println!("cargo:rustc-link-lib=static=libpressio");
-    println!("cargo:rustc-link-arg=-Wl,--whole-archive");
-    println!("cargo:rustc-link-arg=-llibpressio");
-    println!("cargo:rustc-link-arg=-Wl,--no-whole-archive");
     #[cfg(target_os = "linux")]
     println!("cargo:rustc-link-lib=dylib=stdc++");
+    println!(
+        "cargo::rustc-link-search=native={}",
+        libpressio_out.display()
+    );
+    println!(
+        "cargo::rustc-link-search=native={}",
+        libpressio_out.join("lib").display()
+    );
+    println!(
+        "cargo::rustc-link-search=native={}",
+        libpressio_out.join("lib64").display()
+    );
+    println!("cargo::rustc-link-lib=static=libpressio");
 
     let cargo_callbacks =  CargoCallBacksIngoreGeneratedFiles::new(["pressio_version.h"])?;
     let bindings = bindgen::Builder::default()

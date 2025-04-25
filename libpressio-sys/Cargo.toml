@@ -11,6 +11,10 @@ readme = "README.md"
 categories = ["api-bindings", "compression", "encoding"]
 keywords = ["libpressio", "bindgen", "compression", "encoding"]
 
+[features]
+# For now, enabling the `openmp` feature assumes that OpenMP is pre-installed
+openmp = []
+
 [build-dependencies]
 anyhow = "1.0.98"
 bindgen = { workspace = true, features = ["runtime"] }

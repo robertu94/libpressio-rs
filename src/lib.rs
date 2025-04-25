@@ -220,7 +220,7 @@ impl From<ndarray::ArrayD<f32>> for PressioData {
                 libpressio_sys::pressio_dtype_pressio_float_dtype,
                 input_array.as_mut_ptr() as *mut c_void,
                 input_array.ndim(),
-                input_array.shape().as_ptr() as *const usize,
+                input_array.shape().as_ptr(),
             )
         };
         PressioData { data }
@@ -468,7 +468,7 @@ mod tests {
 
     fn input_data() -> ndarray::ArrayD<f32> {
         let data = unsafe {
-            let mut data = ndarray::Array2::<f32>::uninit((30, 30));
+            let mut data = ndarray::Array2::<f32>::uninit([30, 30]);
             for ((x, y), elm) in data.indexed_iter_mut() {
                 *elm = std::mem::MaybeUninit::new((x + y) as f32);
             }
