@@ -1,7 +1,4 @@
-use std::{
-    env,
-    path::{Path, PathBuf},
-};
+use std::{env, path::PathBuf};
 
 fn main() {
     println!("cargo::rerun-if-changed=build.rs");
@@ -18,7 +15,7 @@ fn main() {
     //disable testing to avoid google-test dependency
     stdcompat_config.define("BUILD_TESTING", "OFF");
     // require a C++17 compiler (e.g. gcc 12 or later) for now
-    // this includes Ubuntu 24.04 and later, Fedora, Nyx, et al 
+    // this includes Ubuntu 24.04 and later, Fedora, Nyx, et al
     // https://robertu94.github.io/guides/dependencies
     stdcompat_config.define("STDCOMPAT_CXX_VERSION", "17");
     stdcompat_config.define("STDCOMPAT_CXX_UNSTABLE", "ON");
@@ -36,7 +33,10 @@ fn main() {
     config.define("CMAKE_PREFIX_PATH", stdcompat_out);
     let libpressio_out = config.build();
 
-    println!("cargo:rustc-link-search=native={}", libpressio_out.join("lib64").display());
+    println!(
+        "cargo:rustc-link-search=native={}",
+        libpressio_out.join("lib64").display()
+    );
     println!("cargo:rustc-link-lib=static=libpressio");
     eprintln!("include dir {}", libpressio_out.join("include").display());
 
