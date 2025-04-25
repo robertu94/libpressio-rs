@@ -1,9 +1,40 @@
 use std::{
     env,
-    path::{Path, PathBuf},
+    path::PathBuf,
 };
 
-fn main() {
+#[derive(Debug)]
+struct CargoCallBacksIngoreGeneratedFiles {
+    cargo_callbacks: bindgen::CargoCallbacks,
+    files: std::vec::Vec<regex::Regex>
+}
+impl CargoCallBacksIngoreGeneratedFiles {
+    fn new<'a, T>(files: T) -> Result<CargoCallBacksIngoreGeneratedFiles, anyhow::Error>
+        where T : IntoIterator<Item = &'a str>
+    {
+        Ok(CargoCallBacksIngoreGeneratedFiles {
+            cargo_callbacks: bindgen::CargoCallbacks::new(),
+            files: Vec::from_iter(files.into_iter().map(|v| regex::Regex::new(v).unwrap()))
+        })
+    }
+}
+impl bindgen::callbacks::ParseCallbacks for CargoCallBacksIngoreGeneratedFiles {
+    fn header_file(&self, filename: &str) {
+        if !self.files.iter().any(|f| f.is_match(filename)) {
+            self.cargo_callbacks.header_file(filename)
+        }
+    }
+    fn include_file(&self, filename: &str) {
+        if !self.files.iter().any(|f| f.is_match(filename)) {
+            self.cargo_callbacks.include_file(filename)
+        }
+    }
+    fn read_env_var(&self, filename: &str) {
+        self.cargo_callbacks.read_env_var(filename)
+    }
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo::rerun-if-changed=build.rs");
     println!("cargo::rerun-if-changed=wrapper.h");
     println!("cargo::rerun-if-changed=libpressio");
@@ -38,9 +69,13 @@ fn main() {
 
     println!("cargo:rustc-link-search=native={}", libpressio_out.join("lib64").display());
     println!("cargo:rustc-link-lib=static=libpressio");
-    eprintln!("include dir {}", libpressio_out.join("include").display());
+    println!("cargo:rustc-link-arg=-Wl,--whole-archive");
+    println!("cargo:rustc-link-arg=-llibpressio");
+    println!("cargo:rustc-link-arg=-Wl,--no-whole-archive");
+    #[cfg(target_os = "linux")]
+    println!("cargo:rustc-link-lib=dylib=stdc++");
 
-    let cargo_callbacks = bindgen::CargoCallbacks::new();
+    let cargo_callbacks =  CargoCallBacksIngoreGeneratedFiles::new(["pressio_version.h"])?;
     let bindings = bindgen::Builder::default()
         .clang_arg("-x")
         .clang_arg("c++")
@@ -68,4 +103,5 @@ fn main() {
     bindings
         .write_to_file(out_path.join("bindings.rs"))
         .expect("Couldn't write bindings!");
+    Ok(())
 }

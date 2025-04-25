@@ -195,13 +195,13 @@ pub struct PressioData {
 }
 
 impl PressioData {
-    pub fn new_empty<D: AsRef<[u64]>>(
+    pub fn new_empty<D: AsRef<[usize]>>(
         dtype: libpressio_sys::pressio_dtype,
         dims: D,
     ) -> PressioData {
         let dim_arr = dims.as_ref();
         let data = unsafe {
-            libpressio_sys::pressio_data_new_empty(dtype, dim_arr.len() as u64, dim_arr.as_ptr())
+            libpressio_sys::pressio_data_new_empty(dtype, dim_arr.len(), dim_arr.as_ptr())
         };
         PressioData { data }
     }
@@ -219,8 +219,8 @@ impl From<ndarray::ArrayD<f32>> for PressioData {
             libpressio_sys::pressio_data_new_copy(
                 libpressio_sys::pressio_dtype_pressio_float_dtype,
                 input_array.as_mut_ptr() as *mut c_void,
-                input_array.ndim() as u64,
-                input_array.shape().as_ptr() as *const u64,
+                input_array.ndim(),
+                input_array.shape().as_ptr() as *const usize,
             )
         };
         PressioData { data }
@@ -290,7 +290,8 @@ impl PressioOptions {
         option: PressioOption,
     ) -> Result<PressioOptions, PressioError> {
         let option_name = option_name.as_ref();
-        let option_name = CString::new(option_name)?.as_ptr();
+        let option_name = CString::new(option_name)?;
+        let option_name = option_name.as_ptr();
 
         unsafe {
             match option {
@@ -325,8 +326,9 @@ impl PressioOptions {
                     libpressio_sys::pressio_options_set_double(self.ptr, option_name, x)
                 }
                 PressioOption::string(Some(x)) => {
-                    let option_value = CString::new(x)?.as_ptr();
-                    libpressio_sys::pressio_options_set_string(self.ptr, option_name, option_value)
+                    let option_value = CString::new(x)?;
+                    let option_ptr = option_value.as_ptr();
+                    libpressio_sys::pressio_options_set_string(self.ptr, option_name, option_ptr)
                 }
                 PressioOption::vec_string(Some(x)) => {
                     let option_value = x
@@ -338,7 +340,7 @@ impl PressioOptions {
                     libpressio_sys::pressio_options_set_strings(
                         self.ptr,
                         option_name,
-                        option_value_cptr.len() as u64,
+                        option_value_cptr.len(),
                         option_value_cptr.as_ptr(),
                     );
                 }
@@ -466,27 +468,24 @@ mod tests {
 
     fn input_data() -> ndarray::ArrayD<f32> {
         let data = unsafe {
-            let mut data = ndarray::Array2::<f32>::uninitialized([30, 30]);
+            let mut data = ndarray::Array2::<f32>::uninit((30, 30));
             for ((x, y), elm) in data.indexed_iter_mut() {
-                *elm = (x + y) as f32;
+                *elm = std::mem::MaybeUninit::new((x + y) as f32);
             }
-            data
+            data.assume_init()
         };
         data.into_dyn()
     }
 
     #[test]
     fn safe_works() -> Result<(), crate::PressioError> {
-        let lib = libpressio_sys::new().expect("failed to create library");
-        let compressor = lib.get_compressor("sz").expect("expected compressor");
+        let lib = Pressio::new().expect("failed to create library");
+        eprintln!("supported compressors: {:}", unsafe {CStr::from_ptr(libpressio_sys::pressio_supported_compressors()).to_str()?});
+        let compressor = lib.get_compressor("pressio").expect("expected compressor");
 
         let options = PressioOptions::new()?
-            .set(
-                "sz:error_bound_mode_str",
-                PressioOption::string(Some("abs".to_string())),
-            )?
-            .set("sz:abs_err_bound", PressioOption::float64(Some(1e-6)))?
-            .set("sz:metric", PressioOption::string(Some("size".to_string())))?;
+            .set("pressio:lossless", PressioOption::int32(Some(1)))?
+            .set("pressio:metric", PressioOption::string(Some("size".to_string())))?;
 
         let input_pdata: PressioData = input_data().into();
         let compressed_data =
@@ -526,8 +525,8 @@ mod tests {
             let input_pdata = pressio_data_new_copy(
                 pressio_dtype_pressio_float_dtype,
                 input_array.as_mut_ptr() as *mut c_void,
-                input_array.ndim() as u64,
-                input_array.shape().as_ptr() as *const u64,
+                input_array.ndim(),
+                input_array.shape().as_ptr(),
             );
             assert_ne!(input_pdata, ptr::null_mut::<pressio_data>());
 
@@ -536,20 +535,13 @@ mod tests {
             let output_pdata = pressio_data_new_clone(input_pdata);
             assert_ne!(output_pdata, ptr::null_mut::<pressio_data>());
 
-            let sz_options = pressio_options_new();
-            let sz_error_bound_mode_str = CString::new("sz:error_bound_mode_str").unwrap();
-            let sz_error_bound_mode = CString::new("abs").unwrap();
-            let sz_abs_bound_mode = CString::new("sz:abs_err_bound").unwrap();
-            let sz_metric = CString::new("sz:metric").unwrap();
-            let sz_metric_value = CString::new("size").unwrap();
-            pressio_options_set_string(
-                sz_options,
-                sz_error_bound_mode_str.as_ptr(),
-                sz_error_bound_mode.as_ptr(),
-            );
-            pressio_options_set_string(sz_options, sz_metric.as_ptr(), sz_metric_value.as_ptr());
-            pressio_options_set_double(sz_options, sz_abs_bound_mode.as_ptr(), 1e-6);
-            let ec = pressio_compressor_set_options(compressor, sz_options);
+            let pressio_options = pressio_options_new();
+            let pressio_metric = c"pressio:metric";
+            let pressio_metric_value = c"size";
+            let pressio_lossless = c"pressio:lossless";
+            pressio_options_set_string(pressio_options, pressio_metric.as_ptr(), pressio_metric_value.as_ptr());
+            pressio_options_set_integer(pressio_options, pressio_lossless.as_ptr(), 1);
+            let ec = pressio_compressor_set_options(compressor, pressio_options);
             assert_eq!(ec, 0);
 
             let ec = pressio_compressor_compress(compressor, input_pdata, compressed_pdata);
@@ -566,7 +558,7 @@ mod tests {
 
             pressio_compressor_release(compressor);
             pressio_options_free(metrics_results);
-            pressio_options_free(sz_options);
+            pressio_options_free(pressio_options);
             pressio_data_free(input_pdata);
             pressio_data_free(compressed_pdata);
             pressio_data_free(output_pdata);

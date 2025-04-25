@@ -12,6 +12,8 @@ categories = ["api-bindings", "compression", "encoding"]
 keywords = ["libpressio", "bindgen", "compression", "encoding"]
 
 [build-dependencies]
+anyhow = "1.0.98"
 bindgen = { workspace = true, features = ["runtime"] }
 cc = { workspace = true }
 cmake = { workspace = true }
+regex = "1.11.1"
