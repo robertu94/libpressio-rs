@@ -29,7 +29,14 @@ fn main() {
     let mut config = cmake::Config::new("libpressio");
     config.define("BUILD_SHARED_LIBS", "OFF");
     config.define("BUILD_TESTING", "OFF");
-    config.define("LIBPRESSIO_HAS_OPENMP", "ON");
+    config.define(
+        "LIBPRESSIO_HAS_OPENMP",
+        if cfg!(feature = "openmp") {
+            "ON"
+        } else {
+            "OFF"
+        },
+    );
     config.define("CMAKE_PREFIX_PATH", stdcompat_out);
     let libpressio_out = config.build();
 

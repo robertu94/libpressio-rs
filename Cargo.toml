@@ -32,6 +32,9 @@ description = "High-level Rust bindings to the libpressio compression framework"
 categories = ["api-bindings", "compression", "encoding"]
 keywords = ["libpressio", "compression", "encoding"]
 
+[features]
+openmp = ["libpressio-sys/openmp"]
+
 [dependencies]
 ndarray = { workspace = true }
 libc = { workspace = true }
