@@ -290,7 +290,8 @@ impl PressioOptions {
         option: PressioOption,
     ) -> Result<PressioOptions, PressioError> {
         let option_name = option_name.as_ref();
-        let option_name = CString::new(option_name)?.as_ptr();
+        let option_name_cstr = CString::new(option_name)?;
+        let option_name = option_name_cstr.as_ptr();
 
         unsafe {
             match option {
@@ -325,8 +326,12 @@ impl PressioOptions {
                     libpressio_sys::pressio_options_set_double(self.ptr, option_name, x)
                 }
                 PressioOption::string(Some(x)) => {
-                    let option_value = CString::new(x)?.as_ptr();
-                    libpressio_sys::pressio_options_set_string(self.ptr, option_name, option_value)
+                    let option_value_cstr = CString::new(x)?;
+                    libpressio_sys::pressio_options_set_string(
+                        self.ptr,
+                        option_name,
+                        option_value_cstr.as_ptr(),
+                    )
                 }
                 PressioOption::vec_string(Some(x)) => {
                     let option_value = x
@@ -449,6 +454,8 @@ impl PressioOptions {
                 }
             }
         }
+        // force option_name_cstr's lifetime to extend beyond the FFI calls
+        std::mem::drop(option_name_cstr);
         Ok(self)
     }
 }

@@ -47,7 +47,15 @@ fn main() {
         "cargo::rustc-link-search=native={}",
         libpressio_out.display()
     );
-    println!("cargo::rustc-link-lib=static:+verbatim=liblibpressio.a");
+    println!(
+        "cargo::rustc-link-search=native={}",
+        libpressio_out.join("lib").display()
+    );
+    println!(
+        "cargo::rustc-link-search=native={}",
+        libpressio_out.join("lib64").display()
+    );
+    println!("cargo::rustc-link-lib=static=libpressio");
     eprintln!("include dir {}", libpressio_out.join("include").display());
 
     let cargo_callbacks = bindgen::CargoCallbacks::new();
