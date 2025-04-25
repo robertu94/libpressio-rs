@@ -195,13 +195,13 @@ pub struct PressioData {
 }
 
 impl PressioData {
-    pub fn new_empty<D: AsRef<[u64]>>(
+    pub fn new_empty<D: AsRef<[usize]>>(
         dtype: libpressio_sys::pressio_dtype,
         dims: D,
     ) -> PressioData {
         let dim_arr = dims.as_ref();
         let data = unsafe {
-            libpressio_sys::pressio_data_new_empty(dtype, dim_arr.len() as u64, dim_arr.as_ptr())
+            libpressio_sys::pressio_data_new_empty(dtype, dim_arr.len(), dim_arr.as_ptr())
         };
         PressioData { data }
     }
@@ -219,8 +219,8 @@ impl From<ndarray::ArrayD<f32>> for PressioData {
             libpressio_sys::pressio_data_new_copy(
                 libpressio_sys::pressio_dtype_pressio_float_dtype,
                 input_array.as_mut_ptr() as *mut c_void,
-                input_array.ndim() as u64,
-                input_array.shape().as_ptr() as *const u64,
+                input_array.ndim(),
+                input_array.shape().as_ptr(),
             )
         };
         PressioData { data }
@@ -338,7 +338,7 @@ impl PressioOptions {
                     libpressio_sys::pressio_options_set_strings(
                         self.ptr,
                         option_name,
-                        option_value_cptr.len() as u64,
+                        option_value_cptr.len(),
                         option_value_cptr.as_ptr(),
                     );
                 }
@@ -466,7 +466,7 @@ mod tests {
 
     fn input_data() -> ndarray::ArrayD<f32> {
         let data = unsafe {
-            let mut data = ndarray::Array2::<f32>::uninitialized([30, 30]);
+            let mut data = ndarray::Array2::<f32>::zeros([30, 30]);
             for ((x, y), elm) in data.indexed_iter_mut() {
                 *elm = (x + y) as f32;
             }
@@ -526,8 +526,8 @@ mod tests {
             let input_pdata = pressio_data_new_copy(
                 pressio_dtype_pressio_float_dtype,
                 input_array.as_mut_ptr() as *mut c_void,
-                input_array.ndim() as u64,
-                input_array.shape().as_ptr() as *const u64,
+                input_array.ndim(),
+                input_array.shape().as_ptr(),
             );
             assert_ne!(input_pdata, ptr::null_mut::<pressio_data>());
 
