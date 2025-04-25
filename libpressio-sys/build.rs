@@ -21,7 +21,10 @@ fn main() {
     stdcompat_config.define("STDCOMPAT_CXX_UNSTABLE", "ON");
     stdcompat_config.define("STD_COMPAT_BOOST_REQUIRED", "OFF");
     let stdcompat_out = stdcompat_config.build();
-    println!("cargo:rustc-link-search=native={}", stdcompat_out.display());
+    println!(
+        "cargo::rustc-link-search=native={}",
+        stdcompat_out.display()
+    );
 
     // ---------------------------------------------------------
     // Configure libpressio
@@ -41,10 +44,10 @@ fn main() {
     let libpressio_out = config.build();
 
     println!(
-        "cargo:rustc-link-search=native={}",
+        "cargo::rustc-link-search=native={}",
         libpressio_out.display()
     );
-    println!("cargo:rustc-link-lib=static=:liblibpressio.a");
+    println!("cargo::rustc-link-lib=static+verbatim=liblibpressio.a");
     eprintln!("include dir {}", libpressio_out.join("include").display());
 
     let cargo_callbacks = bindgen::CargoCallbacks::new();
