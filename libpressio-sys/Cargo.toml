@@ -16,8 +16,7 @@ keywords = ["libpressio", "bindgen", "compression", "encoding"]
 openmp = []
 
 [build-dependencies]
-anyhow = "1.0.98"
+anyhow = { workspace = true }
 bindgen = { workspace = true, features = ["runtime"] }
-cc = { workspace = true }
 cmake = { workspace = true }
-regex = "1.11.1"
+regex = { workspace = true }

@@ -480,12 +480,17 @@ mod tests {
     #[test]
     fn safe_works() -> Result<(), crate::PressioError> {
         let lib = Pressio::new().expect("failed to create library");
-        eprintln!("supported compressors: {:}", unsafe {CStr::from_ptr(libpressio_sys::pressio_supported_compressors()).to_str()?});
+        eprintln!("supported compressors: {:}", unsafe {
+            CStr::from_ptr(libpressio_sys::pressio_supported_compressors()).to_str()?
+        });
         let compressor = lib.get_compressor("pressio").expect("expected compressor");
 
         let options = PressioOptions::new()?
             .set("pressio:lossless", PressioOption::int32(Some(1)))?
-            .set("pressio:metric", PressioOption::string(Some("size".to_string())))?;
+            .set(
+                "pressio:metric",
+                PressioOption::string(Some("size".to_string())),
+            )?;
 
         let input_pdata: PressioData = input_data().into();
         let compressed_data =
@@ -539,7 +544,11 @@ mod tests {
             let pressio_metric = c"pressio:metric";
             let pressio_metric_value = c"size";
             let pressio_lossless = c"pressio:lossless";
-            pressio_options_set_string(pressio_options, pressio_metric.as_ptr(), pressio_metric_value.as_ptr());
+            pressio_options_set_string(
+                pressio_options,
+                pressio_metric.as_ptr(),
+                pressio_metric_value.as_ptr(),
+            );
             pressio_options_set_integer(pressio_options, pressio_lossless.as_ptr(), 1);
             let ec = pressio_compressor_set_options(compressor, pressio_options);
             assert_eq!(ec, 0);
