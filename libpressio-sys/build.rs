@@ -43,7 +43,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .expect("missing OUT_DIR");
 
     let target = env::var("TARGET").expect("missing TARGET");
-    let target_os = target.split('-').nth(2).expect("invalid TARGET triple");
 
     // ---------------------------------------------------------
     // Configure std_compat, the compiler portability layer
@@ -119,7 +118,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let libpressio_out = libpressio_config.build();
 
     println!("cargo:rustc-link-lib=static=libpressio");
-    if target_os == "linux" {
+    if target.contains("-linux-") || target.ends_with("-linux") {
         println!("cargo:rustc-link-lib=dylib=stdc++");
     }
     println!(
