@@ -38,6 +38,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo::rerun-if-changed=libpressio");
     println!("cargo::rerun-if-changed=std_compat");
 
+    let out_dir = env::var("OUT_DIR")
+        .map(PathBuf::from)
+        .expect("missing OUT_DIR");
+
+    let target = env::var("TARGET").expect("missing TARGET");
+    let target_os = target.split('-').nth(2).expect("invalid TARGET triple");
+
     // ---------------------------------------------------------
     // Configure std_compat, the compiler portability layer
     // ---------------------------------------------------------
@@ -112,8 +119,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let libpressio_out = libpressio_config.build();
 
     println!("cargo:rustc-link-lib=static=libpressio");
-    #[cfg(target_os = "linux")]
-    println!("cargo:rustc-link-lib=dylib=stdc++");
+    if target_os == "linux" {
+        println!("cargo:rustc-link-lib=dylib=stdc++");
+    }
     println!(
         "cargo::rustc-link-search=native={}",
         libpressio_out.display()
@@ -151,10 +159,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .generate()
         .expect("Unable to generate bindings");
 
-    let out_path =
-        PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR should be set in a build script"));
     bindings
-        .write_to_file(out_path.join("bindings.rs"))
+        .write_to_file(out_dir.join("bindings.rs"))
         .expect("Couldn't write bindings!");
     Ok(())
 }
