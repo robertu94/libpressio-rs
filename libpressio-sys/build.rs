@@ -1,20 +1,18 @@
-use std::{
-    env,
-    path::PathBuf,
-};
+use std::{env, path::PathBuf};
 
 #[derive(Debug)]
 struct CargoCallBacksIngoreGeneratedFiles {
     cargo_callbacks: bindgen::CargoCallbacks,
-    files: std::vec::Vec<regex::Regex>
+    files: std::vec::Vec<regex::Regex>,
 }
 impl CargoCallBacksIngoreGeneratedFiles {
     fn new<'a, T>(files: T) -> Result<CargoCallBacksIngoreGeneratedFiles, anyhow::Error>
-        where T : IntoIterator<Item = &'a str>
+    where
+        T: IntoIterator<Item = &'a str>,
     {
         Ok(CargoCallBacksIngoreGeneratedFiles {
             cargo_callbacks: bindgen::CargoCallbacks::new(),
-            files: Vec::from_iter(files.into_iter().map(|v| regex::Regex::new(v).unwrap()))
+            files: Vec::from_iter(files.into_iter().map(|v| regex::Regex::new(v).unwrap())),
         })
     }
 }
@@ -44,6 +42,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Configure std_compat, the compiler portability layer
     // ---------------------------------------------------------
     let mut stdcompat_config = cmake::Config::new("std_compat");
+    if let Ok(ar) = env::var("AR") {
+        stdcompat_config.define("CMAKE_AR", ar);
+    }
+    if let Ok(ld) = env::var("LD") {
+        stdcompat_config.define("CMAKE_LINKER", ld);
+    }
+    if let Ok(nm) = env::var("NM") {
+        stdcompat_config.define("CMAKE_NM", nm);
+    }
+    if let Ok(objdump) = env::var("OBJDUMP") {
+        stdcompat_config.define("CMAKE_OBJDUMP", objdump);
+    }
+    if let Ok(ranlib) = env::var("RANLIB") {
+        stdcompat_config.define("CMAKE_RANLIB", ranlib);
+    }
+    if let Ok(strip) = env::var("STRIP") {
+        stdcompat_config.define("CMAKE_STRIP", strip);
+    }
     //prefer static libraries for RUST
     stdcompat_config.define("BUILD_SHARED_LIBS", "OFF");
     //disable testing to avoid google-test dependency
@@ -63,10 +79,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ---------------------------------------------------------
     // Configure libpressio
     // ---------------------------------------------------------
-    let mut config = cmake::Config::new("libpressio");
-    config.define("BUILD_SHARED_LIBS", "OFF");
-    config.define("BUILD_TESTING", "OFF");
-    config.define(
+    let mut libpressio_config = cmake::Config::new("libpressio");
+    if let Ok(ar) = env::var("AR") {
+        libpressio_config.define("CMAKE_AR", ar);
+    }
+    if let Ok(ld) = env::var("LD") {
+        libpressio_config.define("CMAKE_LINKER", ld);
+    }
+    if let Ok(nm) = env::var("NM") {
+        libpressio_config.define("CMAKE_NM", nm);
+    }
+    if let Ok(objdump) = env::var("OBJDUMP") {
+        libpressio_config.define("CMAKE_OBJDUMP", objdump);
+    }
+    if let Ok(ranlib) = env::var("RANLIB") {
+        libpressio_config.define("CMAKE_RANLIB", ranlib);
+    }
+    if let Ok(strip) = env::var("STRIP") {
+        libpressio_config.define("CMAKE_STRIP", strip);
+    }
+    libpressio_config.define("BUILD_SHARED_LIBS", "OFF");
+    libpressio_config.define("BUILD_TESTING", "OFF");
+    libpressio_config.define(
         "LIBPRESSIO_HAS_OPENMP",
         if cfg!(feature = "openmp") {
             "ON"
@@ -74,8 +108,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "OFF"
         },
     );
-    config.define("CMAKE_PREFIX_PATH", stdcompat_out);
-    let libpressio_out = config.build();
+    libpressio_config.define("CMAKE_PREFIX_PATH", stdcompat_out);
+    let libpressio_out = libpressio_config.build();
 
     println!("cargo:rustc-link-lib=static=libpressio");
     #[cfg(target_os = "linux")]
@@ -94,7 +128,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     println!("cargo::rustc-link-lib=static=libpressio");
 
-    let cargo_callbacks =  CargoCallBacksIngoreGeneratedFiles::new(["pressio_version.h"])?;
+    let cargo_callbacks = CargoCallBacksIngoreGeneratedFiles::new(["pressio_version.h"])?;
     let bindings = bindgen::Builder::default()
         .clang_arg("-x")
         .clang_arg("c++")
