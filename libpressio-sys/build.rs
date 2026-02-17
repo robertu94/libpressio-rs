@@ -115,6 +115,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
     );
     libpressio_config.define("CMAKE_PREFIX_PATH", stdcompat_out);
+    libpressio_config.define("CMAKE_VERBOSE_MAKEFILE", "ON");
     let libpressio_out = libpressio_config.build();
 
     println!("cargo:rustc-link-lib=static=libpressio");
