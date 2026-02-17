@@ -2,7 +2,10 @@
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 
-use std::ffi::{CStr, CString, c_void};
+use std::{
+    collections::BTreeMap,
+    ffi::{CStr, CString, c_void},
+};
 
 #[derive(Debug, Clone)]
 pub struct PressioError {
@@ -188,6 +191,22 @@ impl Pressio {
             Err(self.into())
         }
     }
+
+    pub fn supported_compressors(&self) -> Result<Vec<String>, PressioError> {
+        // Safety:
+        // - pressio_supported_compressors is safe to call
+        // - the returned pointer's ownership is questionable, so we copy it immediately
+        let supported_compressors =
+            unsafe { CStr::from_ptr(libpressio_sys::pressio_supported_compressors()).to_owned() };
+
+        Ok(supported_compressors
+            .into_string()
+            .map_err(|err| err.utf8_error())?
+            .split(' ')
+            .filter(|x| !x.trim().is_empty())
+            .map(String::from)
+            .collect())
+    }
 }
 
 pub struct PressioData {
@@ -234,7 +253,9 @@ impl Drop for PressioData {
     }
 }
 
+#[non_exhaustive]
 pub enum PressioOption {
+    bool(Option<bool>),
     int8(Option<i8>),
     int16(Option<i16>),
     int32(Option<i32>),
@@ -295,6 +316,9 @@ impl PressioOptions {
 
         unsafe {
             match option {
+                PressioOption::bool(Some(x)) => {
+                    libpressio_sys::pressio_options_set_bool(self.ptr, option_name, x)
+                }
                 PressioOption::int8(Some(x)) => {
                     libpressio_sys::pressio_options_set_integer8(self.ptr, option_name, x)
                 }
@@ -351,6 +375,13 @@ impl PressioOptions {
                     libpressio_sys::pressio_options_set_userptr(self.ptr, option_name, x);
                 }
                 PressioOption::unset => {}
+                PressioOption::bool(None) => {
+                    libpressio_sys::pressio_options_set_type(
+                        self.ptr,
+                        option_name,
+                        libpressio_sys::pressio_option_type_pressio_option_bool_type,
+                    );
+                }
                 PressioOption::int8(None) => {
                     libpressio_sys::pressio_options_set_type(
                         self.ptr,
@@ -452,6 +483,189 @@ impl PressioOptions {
             }
         }
         Ok(self)
+    }
+
+    pub fn get_options(&mut self) -> Result<BTreeMap<String, PressioOption>, PressioError> {
+        // Safety:
+        // - self.ptr is a valid pointer to options
+        let options_size = unsafe { libpressio_sys::pressio_options_size(self.ptr) };
+
+        // Safety:
+        // - self.ptr is a valid pointer to options
+        // - we hold a mutable reference to ensure the iterator is not
+        //   invalidated while we iterate
+        let options_iter = unsafe { libpressio_sys::pressio_options_get_iter(self.ptr) };
+
+        let mut options = Vec::with_capacity(options_size);
+
+        let mut first = true;
+        for _ in 0..options_size {
+            if !first {
+                // Safety:
+                // - options_iter is a valid options iterator
+                // - we only advance when there are more options
+                unsafe { libpressio_sys::pressio_options_iter_next(options_iter) };
+            }
+            first = false;
+            // Safety:
+            // - options_iter is a valid options iterator
+            // - the returned cstr is non-owned to so we copy it immediately
+            let option_key = unsafe {
+                CStr::from_ptr(libpressio_sys::pressio_options_iter_get_key(options_iter))
+                    .to_owned()
+            };
+            // Safety:
+            // - self.ptr is a valid pointer to options
+            // - option_key is a valid options key
+            let option_ptr =
+                unsafe { libpressio_sys::pressio_options_get(self.ptr, option_key.as_ptr()) };
+            let option_key = option_key.into_string().unwrap_or(String::from("<error>"));
+
+            // Safety: option_ptr is a valid pointer to an option
+            let option_type = unsafe { libpressio_sys::pressio_option_get_type(option_ptr) };
+            let option_has_value = unsafe { libpressio_sys::pressio_option_has_value(option_ptr) };
+
+            let option = match option_type {
+                libpressio_sys::pressio_option_type_pressio_option_unset_type => {
+                    Some(PressioOption::unset)
+                }
+                libpressio_sys::pressio_option_type_pressio_option_bool_type => {
+                    Some(PressioOption::bool(if option_has_value {
+                        Some(unsafe { libpressio_sys::pressio_option_get_bool(option_ptr) })
+                    } else {
+                        None
+                    }))
+                }
+                libpressio_sys::pressio_option_type_pressio_option_int8_type => {
+                    Some(PressioOption::int8(if option_has_value {
+                        Some(unsafe { libpressio_sys::pressio_option_get_integer8(option_ptr) })
+                    } else {
+                        None
+                    }))
+                }
+                libpressio_sys::pressio_option_type_pressio_option_int16_type => {
+                    Some(PressioOption::int16(if option_has_value {
+                        Some(unsafe { libpressio_sys::pressio_option_get_integer16(option_ptr) })
+                    } else {
+                        None
+                    }))
+                }
+                libpressio_sys::pressio_option_type_pressio_option_int32_type => {
+                    Some(PressioOption::int32(if option_has_value {
+                        Some(unsafe { libpressio_sys::pressio_option_get_integer(option_ptr) })
+                    } else {
+                        None
+                    }))
+                }
+                libpressio_sys::pressio_option_type_pressio_option_int64_type => {
+                    Some(PressioOption::int64(if option_has_value {
+                        Some(unsafe { libpressio_sys::pressio_option_get_integer64(option_ptr) })
+                    } else {
+                        None
+                    }))
+                }
+                libpressio_sys::pressio_option_type_pressio_option_uint8_type => {
+                    Some(PressioOption::uint8(if option_has_value {
+                        Some(unsafe { libpressio_sys::pressio_option_get_uinteger8(option_ptr) })
+                    } else {
+                        None
+                    }))
+                }
+                libpressio_sys::pressio_option_type_pressio_option_uint16_type => {
+                    Some(PressioOption::uint16(if option_has_value {
+                        Some(unsafe { libpressio_sys::pressio_option_get_uinteger16(option_ptr) })
+                    } else {
+                        None
+                    }))
+                }
+                libpressio_sys::pressio_option_type_pressio_option_uint32_type => {
+                    Some(PressioOption::uint32(if option_has_value {
+                        Some(unsafe { libpressio_sys::pressio_option_get_uinteger(option_ptr) })
+                    } else {
+                        None
+                    }))
+                }
+                libpressio_sys::pressio_option_type_pressio_option_uint64_type => {
+                    Some(PressioOption::uint64(if option_has_value {
+                        Some(unsafe { libpressio_sys::pressio_option_get_uinteger64(option_ptr) })
+                    } else {
+                        None
+                    }))
+                }
+                libpressio_sys::pressio_option_type_pressio_option_float_type => {
+                    Some(PressioOption::float32(if option_has_value {
+                        Some(unsafe { libpressio_sys::pressio_option_get_float(option_ptr) })
+                    } else {
+                        None
+                    }))
+                }
+                libpressio_sys::pressio_option_type_pressio_option_double_type => {
+                    Some(PressioOption::float64(if option_has_value {
+                        Some(unsafe { libpressio_sys::pressio_option_get_double(option_ptr) })
+                    } else {
+                        None
+                    }))
+                }
+                libpressio_sys::pressio_option_type_pressio_option_charptr_type => {
+                    Some(PressioOption::string(if option_has_value {
+                        Some(unsafe {
+                            CStr::from_ptr(libpressio_sys::pressio_option_get_string(option_ptr))
+                                .to_owned()
+                                .into_string()
+                                .unwrap_or(String::from("<error>"))
+                        })
+                    } else {
+                        None
+                    }))
+                }
+                libpressio_sys::pressio_option_type_pressio_option_charptr_array_type => {
+                    Some(PressioOption::string(if option_has_value {
+                        let mut len = 0;
+                        let ptr = unsafe {
+                            libpressio_sys::pressio_option_get_strings(option_ptr, &raw mut len)
+                        };
+                        let array = unsafe { std::slice::from_raw_parts_mut(ptr, len) };
+                        let strings = array
+                            .iter()
+                            .copied()
+                            .map(|ptr| unsafe {
+                                CStr::from_ptr(ptr)
+                                    .to_owned()
+                                    .into_string()
+                                    .unwrap_or(String::from("<error>"))
+                            })
+                            .collect();
+                        unsafe {
+                            libc::free(ptr.cast());
+                        }
+                        Some(strings)
+                    } else {
+                        None
+                    }))
+                }
+                libpressio_sys::pressio_option_type_pressio_option_userptr_type => {
+                    Some(PressioOption::user_ptr(if option_has_value {
+                        Some(unsafe { libpressio_sys::pressio_option_get_userptr(option_ptr) })
+                    } else {
+                        None
+                    }))
+                }
+                // FIXME: skip unsupported types
+                _ => None,
+            };
+
+            // Safety: option_ptr is a valid pointer to an option
+            unsafe { libpressio_sys::pressio_option_free(option_ptr) };
+
+            if let Some(option_value) = option {
+                options.push((option_key, option_value));
+            }
+        }
+
+        // Safety: options_iter is a valid options iterator
+        unsafe { libpressio_sys::pressio_options_iter_free(options_iter) };
+
+        Ok(BTreeMap::from_iter(options))
     }
 }
 impl Drop for PressioOptions {
