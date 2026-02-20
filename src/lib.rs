@@ -8,7 +8,7 @@ use std::{
     mem::ManuallyDrop,
 };
 
-use ndarray::{Array, ArrayView, Data, Dimension};
+use ndarray::{Array, ArrayView, Data, Dimension, IxDyn};
 
 #[derive(Debug, Clone)]
 pub struct PressioError {
@@ -228,6 +228,21 @@ pub enum PressioDtype {
     F64,
 }
 
+pub enum PressioArray {
+    Byte(Array<c_uchar, IxDyn>),
+    Bool(Array<bool, IxDyn>),
+    U8(Array<u8, IxDyn>),
+    U16(Array<u16, IxDyn>),
+    U32(Array<u32, IxDyn>),
+    U64(Array<u64, IxDyn>),
+    I8(Array<i8, IxDyn>),
+    I16(Array<i16, IxDyn>),
+    I32(Array<i32, IxDyn>),
+    I64(Array<i64, IxDyn>),
+    F32(Array<f32, IxDyn>),
+    F64(Array<f64, IxDyn>),
+}
+
 impl PressioDtype {
     const fn to_dtype(self) -> libpressio_sys::pressio_dtype {
         match self {
@@ -369,7 +384,6 @@ impl PressioData {
         let shape = x.shape().to_vec();
 
         let data = if x.is_standard_layout() {
-            let mut x = x;
             let data_ptr = x.as_ptr();
             unsafe {
                 libpressio_sys::pressio_data_new_copy(
@@ -399,6 +413,123 @@ impl PressioData {
             }
         };
         PressioData { data }
+    }
+
+    pub fn from_array(a: PressioArray) -> Self {
+        match a {
+            PressioArray::Byte(a) => Self::new_bytes(a),
+            PressioArray::Bool(a) => Self::new(a),
+            PressioArray::U8(a) => Self::new(a),
+            PressioArray::U16(a) => Self::new(a),
+            PressioArray::U32(a) => Self::new(a),
+            PressioArray::U64(a) => Self::new(a),
+            PressioArray::I8(a) => Self::new(a),
+            PressioArray::I16(a) => Self::new(a),
+            PressioArray::I32(a) => Self::new(a),
+            PressioArray::I64(a) => Self::new(a),
+            PressioArray::F32(a) => Self::new(a),
+            PressioArray::F64(a) => Self::new(a),
+        }
+    }
+
+    pub fn clone_into_array(&self) -> Option<PressioArray> {
+        fn clone_into_array_typed<T: Copy>(ptr: *const T, shape: &[usize]) -> Array<T, IxDyn> {
+            unsafe { ArrayView::from_shape_ptr(shape, ptr) }.to_owned()
+        }
+
+        if !self.has_data() {
+            return None;
+        }
+
+        let dtype = self.dtype()?;
+
+        let shape = (0..self.ndim())
+            .map(|i| unsafe { libpressio_sys::pressio_data_get_dimension(self.data, i) })
+            .collect::<Vec<_>>();
+
+        let mut num_bytes = 0;
+        let ptr =
+            unsafe { libpressio_sys::pressio_data_ptr(self.data, &raw mut num_bytes) }.cast_const();
+
+        match dtype {
+            PressioDtype::Bool => Some(PressioArray::Bool(clone_into_array_typed(
+                ptr.cast(),
+                &shape,
+            ))),
+            PressioDtype::U8 => Some(PressioArray::U8(clone_into_array_typed(ptr.cast(), &shape))),
+            PressioDtype::U16 => Some(PressioArray::U16(clone_into_array_typed(
+                ptr.cast(),
+                &shape,
+            ))),
+            PressioDtype::U32 => Some(PressioArray::U32(clone_into_array_typed(
+                ptr.cast(),
+                &shape,
+            ))),
+            PressioDtype::U64 => Some(PressioArray::U64(clone_into_array_typed(
+                ptr.cast(),
+                &shape,
+            ))),
+            PressioDtype::I8 => Some(PressioArray::I8(clone_into_array_typed(ptr.cast(), &shape))),
+            PressioDtype::I16 => Some(PressioArray::I16(clone_into_array_typed(
+                ptr.cast(),
+                &shape,
+            ))),
+            PressioDtype::I32 => Some(PressioArray::I32(clone_into_array_typed(
+                ptr.cast(),
+                &shape,
+            ))),
+            PressioDtype::I64 => Some(PressioArray::I64(clone_into_array_typed(
+                ptr.cast(),
+                &shape,
+            ))),
+            PressioDtype::F32 => Some(PressioArray::F32(clone_into_array_typed(
+                ptr.cast(),
+                &shape,
+            ))),
+            PressioDtype::F64 => Some(PressioArray::F64(clone_into_array_typed(
+                ptr.cast(),
+                &shape,
+            ))),
+            PressioDtype::Byte => Some(PressioArray::Byte(clone_into_array_typed(
+                ptr.cast(),
+                &shape,
+            ))),
+        }
+    }
+
+    pub fn dtype(&self) -> Option<PressioDtype> {
+        let dtype = unsafe { libpressio_sys::pressio_data_dtype(self.data) };
+
+        match dtype {
+            libpressio_sys::pressio_dtype_pressio_bool_dtype => Some(PressioDtype::Bool),
+            libpressio_sys::pressio_dtype_pressio_uint8_dtype => Some(PressioDtype::U8),
+            libpressio_sys::pressio_dtype_pressio_uint16_dtype => Some(PressioDtype::U16),
+            libpressio_sys::pressio_dtype_pressio_uint32_dtype => Some(PressioDtype::U32),
+            libpressio_sys::pressio_dtype_pressio_uint64_dtype => Some(PressioDtype::U64),
+            libpressio_sys::pressio_dtype_pressio_int8_dtype => Some(PressioDtype::I8),
+            libpressio_sys::pressio_dtype_pressio_int16_dtype => Some(PressioDtype::I16),
+            libpressio_sys::pressio_dtype_pressio_int32_dtype => Some(PressioDtype::I32),
+            libpressio_sys::pressio_dtype_pressio_int64_dtype => Some(PressioDtype::I64),
+            libpressio_sys::pressio_dtype_pressio_float_dtype => Some(PressioDtype::F32),
+            libpressio_sys::pressio_dtype_pressio_double_dtype => Some(PressioDtype::F64),
+            _ => None,
+        }
+    }
+
+    pub fn has_data(&self) -> bool {
+        unsafe { libpressio_sys::pressio_data_has_data(self.data) }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub fn len(&self) -> usize {
+        unsafe { libpressio_sys::pressio_data_num_elements(self.data) }
+    }
+
+    pub fn ndim(&self) -> usize {
+        unsafe { libpressio_sys::pressio_data_num_dimensions(self.data) }
     }
 }
 
