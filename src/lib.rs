@@ -5,12 +5,13 @@
 use std::{
     collections::BTreeMap,
     ffi::{CStr, CString, c_uchar, c_void},
-    mem::ManuallyDrop,
 };
 
-use ndarray::{Array, ArrayView, Data, Dimension, IxDyn};
+use ndarray::{Array, ArrayView, Dimension, IxDyn};
+use thiserror::Error;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Error)]
+#[error("{message}")]
 pub struct PressioError {
     pub error_code: i32,
     pub message: String,

@@ -20,6 +20,7 @@ cmake = { version = "0.1.26", default-features = false }
 libc = { version = "0.2", default-features = false }
 ndarray = { version = "0.16.1", default-features = false }
 regex = { version = "1.11.1", default-features = false }
+thiserror = { version = "2.0.17", default-features = false }
 
 [package]
 name = "libpressio"
@@ -40,3 +41,4 @@ openmp = ["libpressio-sys/openmp"]
 ndarray = { workspace = true }
 libc = { workspace = true }
 libpressio-sys = { workspace = true }
+thiserror = { workspace = true }
