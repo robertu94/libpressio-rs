@@ -150,6 +150,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .allowlist_function("pressio_.*")
         .allowlist_var("pressio_.*")
         .allowlist_type("pressio_.*")
+        .derive_copy(false)
+        .derive_debug(false)
+        .derive_default(false)
+        .derive_eq(false)
+        .derive_hash(false)
+        .derive_ord(false)
+        .derive_ord(false)
+        .derive_partialeq(false)
+        .derive_partialord(false)
         // MSRV 1.85
         .rust_target(match bindgen::RustTarget::stable(85, 0) {
             Ok(target) => target,
