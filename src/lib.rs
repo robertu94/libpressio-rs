@@ -5,6 +5,7 @@
 use std::{
     collections::BTreeMap,
     ffi::{CStr, CString, c_uchar, c_void},
+    ptr::NonNull,
 };
 
 use ndarray::{Array, ArrayView, Dimension, IxDyn};
@@ -19,9 +20,9 @@ pub struct PressioError {
 
 impl From<&Pressio> for PressioError {
     fn from(library: &Pressio) -> Self {
-        let error_code = unsafe { libpressio_sys::pressio_error_code(library.library) };
+        let error_code = unsafe { libpressio_sys::pressio_error_code(library.library.as_ptr()) };
         let message = unsafe {
-            let message = libpressio_sys::pressio_error_msg(library.library);
+            let message = libpressio_sys::pressio_error_msg(library.library.as_ptr());
             CStr::from_ptr(message).to_str()
         };
         match message {
@@ -86,8 +87,13 @@ impl From<std::ffi::NulError> for PressioError {
 }
 
 pub struct Pressio {
-    library: *mut libpressio_sys::pressio,
+    // pressio is Send but !Sync
+    // - impl Send below
+    // - impl !Sync from NonNull
+    library: NonNull<libpressio_sys::pressio>,
 }
+
+unsafe impl Send for Pressio {}
 
 pub struct PressioCompressor {
     ptr: *mut libpressio_sys::pressio_compressor,
@@ -166,7 +172,7 @@ impl Drop for PressioCompressor {
 impl Drop for Pressio {
     fn drop(&mut self) {
         unsafe {
-            libpressio_sys::pressio_release(self.library);
+            libpressio_sys::pressio_release(self.library.as_ptr());
         }
     }
 }
@@ -176,19 +182,19 @@ impl Pressio {
         unsafe {
             library = libpressio_sys::pressio_instance();
         }
-        if !library.is_null() {
-            Ok(Pressio { library })
-        } else {
-            Err(PressioError {
+        match NonNull::new(library) {
+            Some(library) => Ok(Pressio { library }),
+            None => Err(PressioError {
                 error_code: 1,
                 message: "failed to init library".to_string(),
-            })
+            }),
         }
     }
 
     pub fn get_compressor<S: AsRef<str>>(&self, id: S) -> Result<PressioCompressor, PressioError> {
         let id = CString::new(id.as_ref())?;
-        let ptr = unsafe { libpressio_sys::pressio_get_compressor(self.library, id.as_ptr()) };
+        let ptr =
+            unsafe { libpressio_sys::pressio_get_compressor(self.library.as_ptr(), id.as_ptr()) };
         if !ptr.is_null() {
             Ok(PressioCompressor { ptr })
         } else {
