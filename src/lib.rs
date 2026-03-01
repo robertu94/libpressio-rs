@@ -18,61 +18,11 @@ pub struct PressioError {
     pub message: String,
 }
 
-impl From<&Pressio> for PressioError {
-    fn from(library: &Pressio) -> Self {
-        let error_code = unsafe { libpressio_sys::pressio_error_code(library.library.as_ptr()) };
-        let message = unsafe {
-            let message = libpressio_sys::pressio_error_msg(library.library.as_ptr());
-            CStr::from_ptr(message).to_str()
-        };
-        match message {
-            Ok(message) => PressioError {
-                error_code,
-                message: message.to_string(),
-            },
-            Err(e) => e.into(),
-        }
-    }
-}
-
-impl From<PressioCompressor> for PressioError {
-    fn from(library: PressioCompressor) -> Self {
-        let error_code = unsafe { libpressio_sys::pressio_compressor_error_code(library.ptr) };
-        let message = unsafe {
-            let message = libpressio_sys::pressio_compressor_error_msg(library.ptr);
-            CStr::from_ptr(message).to_str()
-        };
-        match message {
-            Ok(message) => PressioError {
-                error_code,
-                message: message.to_string(),
-            },
-            Err(e) => e.into(),
-        }
-    }
-}
-impl From<&PressioCompressor> for PressioError {
-    fn from(library: &PressioCompressor) -> Self {
-        let error_code = unsafe { libpressio_sys::pressio_compressor_error_code(library.ptr) };
-        let message = unsafe {
-            let message = libpressio_sys::pressio_compressor_error_msg(library.ptr);
-            CStr::from_ptr(message).to_str()
-        };
-        match message {
-            Ok(message) => PressioError {
-                error_code,
-                message: message.to_string(),
-            },
-            Err(e) => e.into(),
-        }
-    }
-}
-
 impl From<std::str::Utf8Error> for PressioError {
     fn from(_: std::str::Utf8Error) -> Self {
         PressioError {
             error_code: 2,
-            message: "utf8 error".to_string(),
+            message: String::from("utf8 error"),
         }
     }
 }
@@ -81,7 +31,7 @@ impl From<std::ffi::NulError> for PressioError {
     fn from(_: std::ffi::NulError) -> Self {
         PressioError {
             error_code: 1,
-            message: "nul error".to_string(),
+            message: String::from("nul error"),
         }
     }
 }
@@ -95,87 +45,6 @@ pub struct Pressio {
 
 unsafe impl Send for Pressio {}
 
-pub struct PressioCompressor {
-    ptr: *mut libpressio_sys::pressio_compressor,
-}
-impl PressioCompressor {
-    pub fn compress(
-        &self,
-        input_data: &PressioData,
-        compressed_data: PressioData,
-    ) -> Result<PressioData, PressioError> {
-        let rc = unsafe {
-            libpressio_sys::pressio_compressor_compress(
-                self.ptr,
-                input_data.data,
-                compressed_data.data,
-            )
-        };
-        if rc == 0 {
-            Ok(compressed_data)
-        } else {
-            Err(self.into())
-        }
-    }
-
-    pub fn decompress(
-        &self,
-        compressed_data: &PressioData,
-        decompressed_data: PressioData,
-    ) -> Result<PressioData, PressioError> {
-        let rc = unsafe {
-            libpressio_sys::pressio_compressor_decompress(
-                self.ptr,
-                compressed_data.data,
-                decompressed_data.data,
-            )
-        };
-        if rc == 0 {
-            Ok(decompressed_data)
-        } else {
-            Err(self.into())
-        }
-    }
-
-    pub fn set_options(&self, options: &PressioOptions) -> Result<(), PressioError> {
-        let rc = unsafe { libpressio_sys::pressio_compressor_set_options(self.ptr, options.ptr) };
-        if rc == 0 { Ok(()) } else { Err(self.into()) }
-    }
-
-    pub fn get_options(&self) -> Result<PressioOptions, PressioError> {
-        let options = unsafe { libpressio_sys::pressio_compressor_get_options(self.ptr) };
-        if !options.is_null() {
-            Ok(PressioOptions::from_raw(options))
-        } else {
-            Err(self.into())
-        }
-    }
-
-    pub fn get_metric_results(&self) -> Result<PressioOptions, PressioError> {
-        let ptr = unsafe { libpressio_sys::pressio_compressor_get_metrics_results(self.ptr) };
-        if !ptr.is_null() {
-            Ok(PressioOptions::from_raw(ptr))
-        } else {
-            Err(self.into())
-        }
-    }
-}
-
-impl Drop for PressioCompressor {
-    fn drop(&mut self) {
-        unsafe {
-            libpressio_sys::pressio_compressor_release(self.ptr);
-        }
-    }
-}
-
-impl Drop for Pressio {
-    fn drop(&mut self) {
-        unsafe {
-            libpressio_sys::pressio_release(self.library.as_ptr());
-        }
-    }
-}
 impl Pressio {
     pub fn new() -> Result<Pressio, PressioError> {
         let library: *mut libpressio_sys::pressio;
@@ -191,15 +60,46 @@ impl Pressio {
         }
     }
 
-    pub fn get_compressor<S: AsRef<str>>(&self, id: S) -> Result<PressioCompressor, PressioError> {
+    pub fn get_compressor<S: AsRef<str>>(
+        &mut self,
+        id: S,
+    ) -> Result<PressioCompressor, PressioError> {
         let id = CString::new(id.as_ref())?;
         let ptr =
             unsafe { libpressio_sys::pressio_get_compressor(self.library.as_ptr(), id.as_ptr()) };
-        if !ptr.is_null() {
-            Ok(PressioCompressor { ptr })
-        } else {
-            Err(self.into())
+        let Some(ptr) = NonNull::new(ptr) else {
+            return Err(self.get_error());
+        };
+        let options =
+            unsafe { libpressio_sys::pressio_compressor_get_options(ptr.as_ptr().cast_const()) };
+        let Some(options) = NonNull::new(options) else {
+            unsafe { libpressio_sys::pressio_compressor_release(ptr.as_ptr()) };
+            return Err(unsafe { PressioCompressor::get_error_from_raw(ptr) });
+        };
+        let mut thread_safe = libpressio_sys::pressio_thread_safety_pressio_thread_safety_single;
+        let status = unsafe {
+            libpressio_sys::pressio_options_get_threadsafety(
+                options.as_ptr(),
+                c"pressio:thread_safe".as_ptr(),
+                &raw mut thread_safe,
+            )
+        };
+        unsafe { libpressio_sys::pressio_options_free(options.as_ptr()) };
+        if status != libpressio_sys::pressio_options_key_status_pressio_options_key_set {
+            unsafe { libpressio_sys::pressio_compressor_release(ptr.as_ptr()) };
+            return Err(PressioError {
+                error_code: 1,
+                message: String::from("compressor does not expose a `pressio:thread_safe` option"),
+            });
+        };
+        if thread_safe < libpressio_sys::pressio_thread_safety_pressio_thread_safety_multiple {
+            unsafe { libpressio_sys::pressio_compressor_release(ptr.as_ptr()) };
+            return Err(PressioError {
+                error_code: 1,
+                message: String::from("compressor cannot be sent across threads"),
+            });
         }
+        Ok(PressioCompressor { ptr })
     }
 
     pub fn supported_compressors(&self) -> Result<Vec<String>, PressioError> {
@@ -216,6 +116,141 @@ impl Pressio {
             .filter(|x| !x.trim().is_empty())
             .map(String::from)
             .collect())
+    }
+
+    fn get_error(&mut self) -> PressioError {
+        let error_code = unsafe { libpressio_sys::pressio_error_code(self.library.as_ptr()) };
+        let message = unsafe {
+            let message = libpressio_sys::pressio_error_msg(self.library.as_ptr());
+            CStr::from_ptr(message).to_str()
+        };
+        match message {
+            Ok(message) => PressioError {
+                error_code,
+                message: message.to_string(),
+            },
+            Err(e) => e.into(),
+        }
+    }
+}
+
+impl Drop for Pressio {
+    fn drop(&mut self) {
+        unsafe {
+            libpressio_sys::pressio_release(self.library.as_ptr());
+        }
+    }
+}
+
+pub struct PressioCompressor {
+    // pressio_compressor (generally) is Send but !Sync
+    // - impl Send below
+    // - impl !Sync from NonNull
+    // - check at runtime that no compressor can be instantiated that would
+    //   violate these properties
+    ptr: NonNull<libpressio_sys::pressio_compressor>,
+}
+
+unsafe impl Send for PressioCompressor {}
+
+impl PressioCompressor {
+    pub fn compress(
+        &mut self,
+        input_data: &PressioData,
+        compressed_data: PressioData,
+    ) -> Result<PressioData, PressioError> {
+        let rc = unsafe {
+            libpressio_sys::pressio_compressor_compress(
+                self.ptr.as_ptr(),
+                input_data.data,
+                compressed_data.data,
+            )
+        };
+        if rc == 0 {
+            Ok(compressed_data)
+        } else {
+            Err(self.get_error())
+        }
+    }
+
+    pub fn decompress(
+        &mut self,
+        compressed_data: &PressioData,
+        decompressed_data: PressioData,
+    ) -> Result<PressioData, PressioError> {
+        let rc = unsafe {
+            libpressio_sys::pressio_compressor_decompress(
+                self.ptr.as_ptr(),
+                compressed_data.data,
+                decompressed_data.data,
+            )
+        };
+        if rc == 0 {
+            Ok(decompressed_data)
+        } else {
+            Err(self.get_error())
+        }
+    }
+
+    pub fn set_options(&mut self, options: &PressioOptions) -> Result<(), PressioError> {
+        let rc = unsafe {
+            libpressio_sys::pressio_compressor_set_options(self.ptr.as_ptr(), options.ptr)
+        };
+        if rc == 0 {
+            Ok(())
+        } else {
+            Err(self.get_error())
+        }
+    }
+
+    pub fn get_options(&self) -> Result<PressioOptions, PressioError> {
+        let options = unsafe {
+            libpressio_sys::pressio_compressor_get_options(self.ptr.as_ptr().cast_const())
+        };
+        if !options.is_null() {
+            Ok(PressioOptions::from_raw(options))
+        } else {
+            Err(self.get_error())
+        }
+    }
+
+    pub fn get_metric_results(&self) -> Result<PressioOptions, PressioError> {
+        let ptr = unsafe {
+            libpressio_sys::pressio_compressor_get_metrics_results(self.ptr.as_ptr().cast_const())
+        };
+        if !ptr.is_null() {
+            Ok(PressioOptions::from_raw(ptr))
+        } else {
+            Err(self.get_error())
+        }
+    }
+
+    fn get_error(&self) -> PressioError {
+        unsafe { Self::get_error_from_raw(self.ptr) }
+    }
+
+    unsafe fn get_error_from_raw(ptr: NonNull<libpressio_sys::pressio_compressor>) -> PressioError {
+        let error_code =
+            unsafe { libpressio_sys::pressio_compressor_error_code(ptr.as_ptr().cast_const()) };
+        let message = unsafe {
+            let message = libpressio_sys::pressio_compressor_error_msg(ptr.as_ptr().cast_const());
+            CStr::from_ptr(message).to_str()
+        };
+        match message {
+            Ok(message) => PressioError {
+                error_code,
+                message: message.to_string(),
+            },
+            Err(e) => e.into(),
+        }
+    }
+}
+
+impl Drop for PressioCompressor {
+    fn drop(&mut self) {
+        unsafe {
+            libpressio_sys::pressio_compressor_release(self.ptr.as_ptr());
+        }
     }
 }
 
@@ -306,8 +341,6 @@ impl_pressio_element! {
     F32(f32) => pressio_dtype_pressio_float_dtype,
     F64(f64) => pressio_dtype_pressio_double_dtype
 }
-
-// TODO: add special API for byte access (unsigned char)
 
 pub struct PressioData {
     data: *mut libpressio_sys::pressio_data,
@@ -1001,11 +1034,11 @@ mod tests {
 
     #[test]
     fn safe_works() -> Result<(), crate::PressioError> {
-        let lib = Pressio::new().expect("failed to create library");
+        let mut lib = Pressio::new().expect("failed to create library");
         eprintln!("supported compressors: {:}", unsafe {
             CStr::from_ptr(libpressio_sys::pressio_supported_compressors()).to_str()?
         });
-        let compressor = lib.get_compressor("pressio").expect("expected compressor");
+        let mut compressor = lib.get_compressor("pressio").expect("expected compressor");
 
         let options = PressioOptions::new()?
             .set("pressio:lossless", PressioOption::int32(Some(1)))?
