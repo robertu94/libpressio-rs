@@ -70,26 +70,27 @@ impl Pressio {
         let Some(ptr) = NonNull::new(ptr) else {
             return Err(self.get_error());
         };
-        let options =
-            unsafe { libpressio_sys::pressio_compressor_get_options(ptr.as_ptr().cast_const()) };
-        let Some(options) = NonNull::new(options) else {
+        let config = unsafe {
+            libpressio_sys::pressio_compressor_get_configuration(ptr.as_ptr().cast_const())
+        };
+        let Some(config) = NonNull::new(config) else {
             unsafe { libpressio_sys::pressio_compressor_release(ptr.as_ptr()) };
             return Err(unsafe { PressioCompressor::get_error_from_raw(ptr) });
         };
         let mut thread_safe = libpressio_sys::pressio_thread_safety_pressio_thread_safety_single;
         let status = unsafe {
             libpressio_sys::pressio_options_get_threadsafety(
-                options.as_ptr(),
+                config.as_ptr(),
                 c"pressio:thread_safe".as_ptr(),
                 &raw mut thread_safe,
             )
         };
-        unsafe { libpressio_sys::pressio_options_free(options.as_ptr()) };
+        unsafe { libpressio_sys::pressio_options_free(config.as_ptr()) };
         if status != libpressio_sys::pressio_options_key_status_pressio_options_key_set {
             unsafe { libpressio_sys::pressio_compressor_release(ptr.as_ptr()) };
             return Err(PressioError {
                 error_code: 1,
-                message: String::from("compressor does not expose a `pressio:thread_safe` option"),
+                message: String::from("compressor does not expose a `pressio:thread_safe` config"),
             });
         };
         if thread_safe < libpressio_sys::pressio_thread_safety_pressio_thread_safety_multiple {
@@ -202,6 +203,26 @@ impl PressioCompressor {
             Ok(())
         } else {
             Err(self.get_error())
+        }
+    }
+
+    pub fn get_configuration(&self) -> Result<PressioOptions, PressioError> {
+        let config = unsafe {
+            libpressio_sys::pressio_compressor_get_configuration(self.ptr.as_ptr().cast_const())
+        };
+        match NonNull::new(config) {
+            Some(ptr) => Ok(PressioOptions { ptr }),
+            None => Err(self.get_error()),
+        }
+    }
+
+    pub fn get_documentation(&self) -> Result<PressioOptions, PressioError> {
+        let docs = unsafe {
+            libpressio_sys::pressio_compressor_get_documentation(self.ptr.as_ptr().cast_const())
+        };
+        match NonNull::new(docs) {
+            Some(ptr) => Ok(PressioOptions { ptr }),
+            None => Err(self.get_error()),
         }
     }
 
