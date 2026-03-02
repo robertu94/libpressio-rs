@@ -4,7 +4,7 @@
 
 use std::{
     collections::BTreeMap,
-    ffi::{CStr, CString, c_uchar, c_void},
+    ffi::{CStr, CString, c_char, c_uchar, c_void},
     ptr::NonNull,
 };
 
@@ -105,13 +105,12 @@ impl Pressio {
     pub fn supported_compressors(&self) -> Result<Vec<String>, PressioError> {
         // Safety:
         // - pressio_supported_compressors is safe to call
-        // - the returned pointer's ownership is questionable, so we copy it immediately
+        // - the returned pointer has 'static lifetime
         let supported_compressors =
-            unsafe { CStr::from_ptr(libpressio_sys::pressio_supported_compressors()).to_owned() };
+            unsafe { CStr::from_ptr(libpressio_sys::pressio_supported_compressors()) };
 
         Ok(supported_compressors
-            .into_string()
-            .map_err(|err| err.utf8_error())?
+            .to_str()?
             .split(' ')
             .filter(|x| !x.trim().is_empty())
             .map(String::from)
@@ -162,8 +161,8 @@ impl PressioCompressor {
         let rc = unsafe {
             libpressio_sys::pressio_compressor_compress(
                 self.ptr.as_ptr(),
-                input_data.data,
-                compressed_data.data,
+                input_data.data.as_ptr().cast_const(),
+                compressed_data.data.as_ptr(),
             )
         };
         if rc == 0 {
@@ -181,8 +180,8 @@ impl PressioCompressor {
         let rc = unsafe {
             libpressio_sys::pressio_compressor_decompress(
                 self.ptr.as_ptr(),
-                compressed_data.data,
-                decompressed_data.data,
+                compressed_data.data.as_ptr().cast_const(),
+                decompressed_data.data.as_ptr(),
             )
         };
         if rc == 0 {
@@ -194,7 +193,10 @@ impl PressioCompressor {
 
     pub fn set_options(&mut self, options: &PressioOptions) -> Result<(), PressioError> {
         let rc = unsafe {
-            libpressio_sys::pressio_compressor_set_options(self.ptr.as_ptr(), options.ptr)
+            libpressio_sys::pressio_compressor_set_options(
+                self.ptr.as_ptr(),
+                options.ptr.as_ptr().cast_const(),
+            )
         };
         if rc == 0 {
             Ok(())
@@ -207,10 +209,9 @@ impl PressioCompressor {
         let options = unsafe {
             libpressio_sys::pressio_compressor_get_options(self.ptr.as_ptr().cast_const())
         };
-        if !options.is_null() {
-            Ok(PressioOptions::from_raw(options))
-        } else {
-            Err(self.get_error())
+        match NonNull::new(options) {
+            Some(ptr) => Ok(PressioOptions { ptr }),
+            None => Err(self.get_error()),
         }
     }
 
@@ -218,10 +219,9 @@ impl PressioCompressor {
         let ptr = unsafe {
             libpressio_sys::pressio_compressor_get_metrics_results(self.ptr.as_ptr().cast_const())
         };
-        if !ptr.is_null() {
-            Ok(PressioOptions::from_raw(ptr))
-        } else {
-            Err(self.get_error())
+        match NonNull::new(ptr) {
+            Some(ptr) => Ok(PressioOptions { ptr }),
+            None => Err(self.get_error()),
         }
     }
 
@@ -270,21 +270,6 @@ pub enum PressioDtype {
     F64,
 }
 
-pub enum PressioArray {
-    Byte(Array<c_uchar, IxDyn>),
-    Bool(Array<bool, IxDyn>),
-    U8(Array<u8, IxDyn>),
-    U16(Array<u16, IxDyn>),
-    U32(Array<u32, IxDyn>),
-    U64(Array<u64, IxDyn>),
-    I8(Array<i8, IxDyn>),
-    I16(Array<i16, IxDyn>),
-    I32(Array<i32, IxDyn>),
-    I64(Array<i64, IxDyn>),
-    F32(Array<f32, IxDyn>),
-    F64(Array<f64, IxDyn>),
-}
-
 impl PressioDtype {
     const fn to_dtype(self) -> libpressio_sys::pressio_dtype {
         match self {
@@ -300,6 +285,40 @@ impl PressioDtype {
             Self::F32 => libpressio_sys::pressio_dtype_pressio_float_dtype,
             Self::F64 => libpressio_sys::pressio_dtype_pressio_double_dtype,
             Self::Byte => libpressio_sys::pressio_dtype_pressio_byte_dtype,
+        }
+    }
+}
+
+pub enum PressioArray {
+    Byte(Array<c_uchar, IxDyn>),
+    Bool(Array<bool, IxDyn>),
+    U8(Array<u8, IxDyn>),
+    U16(Array<u16, IxDyn>),
+    U32(Array<u32, IxDyn>),
+    U64(Array<u64, IxDyn>),
+    I8(Array<i8, IxDyn>),
+    I16(Array<i16, IxDyn>),
+    I32(Array<i32, IxDyn>),
+    I64(Array<i64, IxDyn>),
+    F32(Array<f32, IxDyn>),
+    F64(Array<f64, IxDyn>),
+}
+
+impl PressioArray {
+    pub const fn dtype(&self) -> PressioDtype {
+        match self {
+            Self::Byte(_) => PressioDtype::Byte,
+            Self::Bool(_) => PressioDtype::Bool,
+            Self::U8(_) => PressioDtype::U8,
+            Self::U16(_) => PressioDtype::U16,
+            Self::U32(_) => PressioDtype::U32,
+            Self::U64(_) => PressioDtype::U64,
+            Self::I8(_) => PressioDtype::I8,
+            Self::I16(_) => PressioDtype::I16,
+            Self::I32(_) => PressioDtype::I32,
+            Self::I64(_) => PressioDtype::I64,
+            Self::F32(_) => PressioDtype::F32,
+            Self::F64(_) => PressioDtype::F64,
         }
     }
 }
@@ -343,8 +362,13 @@ impl_pressio_element! {
 }
 
 pub struct PressioData {
-    data: *mut libpressio_sys::pressio_data,
+    // pressio_data is Send but !Sync
+    // - impl Send below
+    // - impl !Sync from NonNull
+    data: NonNull<libpressio_sys::pressio_data>,
 }
+
+unsafe impl Send for PressioData {}
 
 impl PressioData {
     pub fn new_empty<D: AsRef<[usize]>>(dtype: PressioDtype, shape: D) -> PressioData {
@@ -352,6 +376,7 @@ impl PressioData {
         let data = unsafe {
             libpressio_sys::pressio_data_new_empty(dtype.to_dtype(), shape.len(), shape.as_ptr())
         };
+        let data = NonNull::new(data).expect("pressio_data_new_empty must not return null");
         PressioData { data }
     }
 
@@ -406,6 +431,7 @@ impl PressioData {
                 )
             }
         };
+        let data = NonNull::new(data).expect("pressio_data_new_move must not return null");
         PressioData { data }
     }
 
@@ -452,6 +478,12 @@ impl PressioData {
                 )
             }
         };
+        #[expect(clippy::expect_fun_call)]
+        let data = NonNull::new(data).expect(if x.is_standard_layout() {
+            "pressio_data_new_copy must not return null"
+        } else {
+            "pressio_data_new_move must not return null"
+        });
         PressioData { data }
     }
 
@@ -484,12 +516,16 @@ impl PressioData {
         let dtype = self.dtype()?;
 
         let shape = (0..self.ndim())
-            .map(|i| unsafe { libpressio_sys::pressio_data_get_dimension(self.data, i) })
+            .map(|i| unsafe {
+                libpressio_sys::pressio_data_get_dimension(self.data.as_ptr().cast_const(), i)
+            })
             .collect::<Vec<_>>();
 
         let mut num_bytes = 0;
-        let ptr =
-            unsafe { libpressio_sys::pressio_data_ptr(self.data, &raw mut num_bytes) }.cast_const();
+        let ptr = unsafe {
+            libpressio_sys::pressio_data_ptr(self.data.as_ptr().cast_const(), &raw mut num_bytes)
+        }
+        .cast_const();
 
         match dtype {
             PressioDtype::Bool => Some(PressioArray::Bool(clone_into_array_typed(
@@ -538,7 +574,7 @@ impl PressioData {
     }
 
     pub fn dtype(&self) -> Option<PressioDtype> {
-        let dtype = unsafe { libpressio_sys::pressio_data_dtype(self.data) };
+        let dtype = unsafe { libpressio_sys::pressio_data_dtype(self.data.as_ptr().cast_const()) };
 
         match dtype {
             libpressio_sys::pressio_dtype_pressio_bool_dtype => Some(PressioDtype::Bool),
@@ -557,7 +593,7 @@ impl PressioData {
     }
 
     pub fn has_data(&self) -> bool {
-        unsafe { libpressio_sys::pressio_data_has_data(self.data) }
+        unsafe { libpressio_sys::pressio_data_has_data(self.data.as_ptr().cast_const()) }
     }
 
     pub fn is_empty(&self) -> bool {
@@ -565,11 +601,11 @@ impl PressioData {
     }
 
     pub fn len(&self) -> usize {
-        unsafe { libpressio_sys::pressio_data_num_elements(self.data) }
+        unsafe { libpressio_sys::pressio_data_num_elements(self.data.as_ptr().cast_const()) }
     }
 
     pub fn ndim(&self) -> usize {
-        unsafe { libpressio_sys::pressio_data_num_dimensions(self.data) }
+        unsafe { libpressio_sys::pressio_data_num_dimensions(self.data.as_ptr().cast_const()) }
     }
 }
 
@@ -580,16 +616,17 @@ unsafe extern "C" fn deleter_trampoline(_data_ptr: *mut c_void, fn_ptr: *mut c_v
 
 impl Clone for PressioData {
     fn clone(&self) -> PressioData {
-        PressioData {
-            data: unsafe { libpressio_sys::pressio_data_new_clone(self.data) },
-        }
+        let data =
+            unsafe { libpressio_sys::pressio_data_new_clone(self.data.as_ptr().cast_const()) };
+        let data = NonNull::new(data).expect("pressio_data_new_clone must not return null");
+        PressioData { data }
     }
 }
 
 impl Drop for PressioData {
     fn drop(&mut self) {
         unsafe {
-            libpressio_sys::pressio_data_free(self.data);
+            libpressio_sys::pressio_data_free(self.data.as_ptr());
         }
     }
 }
@@ -615,35 +652,22 @@ pub enum PressioOption {
 }
 
 pub struct PressioOptions {
-    ptr: *mut libpressio_sys::pressio_options,
-}
-
-impl std::fmt::Display for PressioOptions {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let msg = unsafe {
-            let ptr = libpressio_sys::pressio_options_to_string(self.ptr);
-            let s = CStr::from_ptr(ptr).to_str().unwrap().to_string();
-            libc::free(ptr as *mut c_void);
-            s
-        };
-        write!(f, "{}", msg)
-    }
+    // pressio_options is Send but !Sync
+    // - impl Send below
+    // - impl !Sync from NonNull
+    ptr: NonNull<libpressio_sys::pressio_options>,
 }
 
 impl PressioOptions {
     pub fn new() -> Result<PressioOptions, PressioError> {
         let ptr = unsafe { libpressio_sys::pressio_options_new() };
-        if !ptr.is_null() {
-            Ok(PressioOptions { ptr })
-        } else {
-            Err(PressioError {
+        match NonNull::new(ptr) {
+            Some(ptr) => Ok(Self { ptr }),
+            None => Err(PressioError {
                 message: "failed to allocate options".to_string(),
                 error_code: 1,
-            })
+            }),
         }
-    }
-    fn from_raw(ptr: *mut libpressio_sys::pressio_options) -> PressioOptions {
-        PressioOptions { ptr }
     }
 
     pub fn set<S: AsRef<str>>(
@@ -658,42 +682,50 @@ impl PressioOptions {
         unsafe {
             match option {
                 PressioOption::bool(Some(x)) => {
-                    libpressio_sys::pressio_options_set_bool(self.ptr, option_name, x)
+                    libpressio_sys::pressio_options_set_bool(self.ptr.as_ptr(), option_name, x)
                 }
                 PressioOption::int8(Some(x)) => {
-                    libpressio_sys::pressio_options_set_integer8(self.ptr, option_name, x)
+                    libpressio_sys::pressio_options_set_integer8(self.ptr.as_ptr(), option_name, x)
                 }
                 PressioOption::int16(Some(x)) => {
-                    libpressio_sys::pressio_options_set_integer16(self.ptr, option_name, x)
+                    libpressio_sys::pressio_options_set_integer16(self.ptr.as_ptr(), option_name, x)
                 }
                 PressioOption::int32(Some(x)) => {
-                    libpressio_sys::pressio_options_set_integer(self.ptr, option_name, x)
+                    libpressio_sys::pressio_options_set_integer(self.ptr.as_ptr(), option_name, x)
                 }
                 PressioOption::int64(Some(x)) => {
-                    libpressio_sys::pressio_options_set_integer64(self.ptr, option_name, x)
+                    libpressio_sys::pressio_options_set_integer64(self.ptr.as_ptr(), option_name, x)
                 }
                 PressioOption::uint8(Some(x)) => {
-                    libpressio_sys::pressio_options_set_uinteger8(self.ptr, option_name, x)
+                    libpressio_sys::pressio_options_set_uinteger8(self.ptr.as_ptr(), option_name, x)
                 }
-                PressioOption::uint16(Some(x)) => {
-                    libpressio_sys::pressio_options_set_uinteger16(self.ptr, option_name, x)
-                }
+                PressioOption::uint16(Some(x)) => libpressio_sys::pressio_options_set_uinteger16(
+                    self.ptr.as_ptr(),
+                    option_name,
+                    x,
+                ),
                 PressioOption::uint32(Some(x)) => {
-                    libpressio_sys::pressio_options_set_uinteger(self.ptr, option_name, x)
+                    libpressio_sys::pressio_options_set_uinteger(self.ptr.as_ptr(), option_name, x)
                 }
-                PressioOption::uint64(Some(x)) => {
-                    libpressio_sys::pressio_options_set_uinteger64(self.ptr, option_name, x)
-                }
+                PressioOption::uint64(Some(x)) => libpressio_sys::pressio_options_set_uinteger64(
+                    self.ptr.as_ptr(),
+                    option_name,
+                    x,
+                ),
                 PressioOption::float32(Some(x)) => {
-                    libpressio_sys::pressio_options_set_float(self.ptr, option_name, x)
+                    libpressio_sys::pressio_options_set_float(self.ptr.as_ptr(), option_name, x)
                 }
                 PressioOption::float64(Some(x)) => {
-                    libpressio_sys::pressio_options_set_double(self.ptr, option_name, x)
+                    libpressio_sys::pressio_options_set_double(self.ptr.as_ptr(), option_name, x)
                 }
                 PressioOption::string(Some(x)) => {
                     let option_value = CString::new(x)?;
                     let option_ptr = option_value.as_ptr();
-                    libpressio_sys::pressio_options_set_string(self.ptr, option_name, option_ptr)
+                    libpressio_sys::pressio_options_set_string(
+                        self.ptr.as_ptr(),
+                        option_name,
+                        option_ptr,
+                    )
                 }
                 PressioOption::vec_string(Some(x)) => {
                     let option_value = x
@@ -703,122 +735,128 @@ impl PressioOptions {
                     let option_value_cptr: Vec<*const i8> =
                         option_value.iter().map(|val| val.as_ptr()).collect();
                     libpressio_sys::pressio_options_set_strings(
-                        self.ptr,
+                        self.ptr.as_ptr(),
                         option_name,
                         option_value_cptr.len(),
                         option_value_cptr.as_ptr(),
                     );
                 }
                 PressioOption::data(Some(x)) => {
-                    libpressio_sys::pressio_options_set_data(self.ptr, option_name, x.data);
+                    let data_ptr = x.data.as_ptr();
+                    std::mem::forget(x);
+                    libpressio_sys::pressio_options_set_data(
+                        self.ptr.as_ptr(),
+                        option_name,
+                        data_ptr,
+                    );
                 }
                 PressioOption::user_ptr(Some(x)) => {
-                    libpressio_sys::pressio_options_set_userptr(self.ptr, option_name, x);
+                    libpressio_sys::pressio_options_set_userptr(self.ptr.as_ptr(), option_name, x);
                 }
                 PressioOption::unset => {}
                 PressioOption::bool(None) => {
                     libpressio_sys::pressio_options_set_type(
-                        self.ptr,
+                        self.ptr.as_ptr(),
                         option_name,
                         libpressio_sys::pressio_option_type_pressio_option_bool_type,
                     );
                 }
                 PressioOption::int8(None) => {
                     libpressio_sys::pressio_options_set_type(
-                        self.ptr,
+                        self.ptr.as_ptr(),
                         option_name,
                         libpressio_sys::pressio_option_type_pressio_option_int8_type,
                     );
                 }
                 PressioOption::int16(None) => {
                     libpressio_sys::pressio_options_set_type(
-                        self.ptr,
+                        self.ptr.as_ptr(),
                         option_name,
-                        libpressio_sys::pressio_dtype_pressio_int16_dtype,
+                        libpressio_sys::pressio_option_type_pressio_option_int16_type,
                     );
                 }
                 PressioOption::int32(None) => {
                     libpressio_sys::pressio_options_set_type(
-                        self.ptr,
+                        self.ptr.as_ptr(),
                         option_name,
-                        libpressio_sys::pressio_dtype_pressio_int32_dtype,
+                        libpressio_sys::pressio_option_type_pressio_option_int32_type,
                     );
                 }
                 PressioOption::int64(None) => {
                     libpressio_sys::pressio_options_set_type(
-                        self.ptr,
+                        self.ptr.as_ptr(),
                         option_name,
-                        libpressio_sys::pressio_dtype_pressio_int64_dtype,
+                        libpressio_sys::pressio_option_type_pressio_option_int64_type,
                     );
                 }
                 PressioOption::uint8(None) => {
                     libpressio_sys::pressio_options_set_type(
-                        self.ptr,
+                        self.ptr.as_ptr(),
                         option_name,
-                        libpressio_sys::pressio_dtype_pressio_uint8_dtype,
+                        libpressio_sys::pressio_option_type_pressio_option_uint8_type,
                     );
                 }
                 PressioOption::uint16(None) => {
                     libpressio_sys::pressio_options_set_type(
-                        self.ptr,
+                        self.ptr.as_ptr(),
                         option_name,
-                        libpressio_sys::pressio_dtype_pressio_uint16_dtype,
+                        libpressio_sys::pressio_option_type_pressio_option_uint16_type,
                     );
                 }
                 PressioOption::uint32(None) => {
                     libpressio_sys::pressio_options_set_type(
-                        self.ptr,
+                        self.ptr.as_ptr(),
                         option_name,
-                        libpressio_sys::pressio_dtype_pressio_uint32_dtype,
+                        libpressio_sys::pressio_option_type_pressio_option_uint32_type,
                     );
                 }
                 PressioOption::uint64(None) => {
                     libpressio_sys::pressio_options_set_type(
-                        self.ptr,
+                        self.ptr.as_ptr(),
                         option_name,
-                        libpressio_sys::pressio_dtype_pressio_uint64_dtype,
+                        libpressio_sys::pressio_option_type_pressio_option_uint64_type,
                     );
                 }
                 PressioOption::float32(None) => {
                     libpressio_sys::pressio_options_set_type(
-                        self.ptr,
+                        self.ptr.as_ptr(),
                         option_name,
-                        libpressio_sys::pressio_dtype_pressio_float_dtype,
+                        libpressio_sys::pressio_option_type_pressio_option_float_type,
                     );
                 }
                 PressioOption::float64(None) => {
                     libpressio_sys::pressio_options_set_type(
-                        self.ptr,
+                        self.ptr.as_ptr(),
                         option_name,
-                        libpressio_sys::pressio_dtype_pressio_double_dtype,
+                        libpressio_sys::pressio_option_type_pressio_option_double_type,
                     );
                 }
                 PressioOption::string(None) => {
                     libpressio_sys::pressio_options_set_type(
-                        self.ptr,
+                        self.ptr.as_ptr(),
                         option_name,
-                        libpressio_sys::pressio_dtype_pressio_uint64_dtype,
+                        libpressio_sys::pressio_option_type_pressio_option_charptr_type,
                     );
                 }
                 PressioOption::vec_string(None) => {
                     libpressio_sys::pressio_options_set_type(
-                        self.ptr,
+                        self.ptr.as_ptr(),
                         option_name,
-                        libpressio_sys::pressio_dtype_pressio_uint64_dtype,
+                        libpressio_sys::pressio_option_type_pressio_option_charptr_array_type,
                     );
                 }
                 PressioOption::data(None) => {
                     libpressio_sys::pressio_options_set_type(
-                        self.ptr,
+                        self.ptr.as_ptr(),
                         option_name,
-                        libpressio_sys::pressio_dtype_pressio_uint64_dtype,
+                        libpressio_sys::pressio_option_type_pressio_option_data_type,
                     );
                 }
                 PressioOption::user_ptr(None) => {
                     libpressio_sys::pressio_options_set_type(
-                        self.ptr,
+                        self.ptr.as_ptr(),
                         option_name,
-                        libpressio_sys::pressio_dtype_pressio_uint64_dtype,
+                        libpressio_sys::pressio_option_type_pressio_option_userptr_type,
                     );
                 }
             }
@@ -829,13 +867,15 @@ impl PressioOptions {
     pub fn get_options(&mut self) -> Result<BTreeMap<String, PressioOption>, PressioError> {
         // Safety:
         // - self.ptr is a valid pointer to options
-        let options_size = unsafe { libpressio_sys::pressio_options_size(self.ptr) };
+        let options_size =
+            unsafe { libpressio_sys::pressio_options_size(self.ptr.as_ptr().cast_const()) };
 
         // Safety:
         // - self.ptr is a valid pointer to options
         // - we hold a mutable reference to ensure the iterator is not
         //   invalidated while we iterate
-        let options_iter = unsafe { libpressio_sys::pressio_options_get_iter(self.ptr) };
+        let options_iter =
+            unsafe { libpressio_sys::pressio_options_get_iter(self.ptr.as_ptr().cast_const()) };
 
         let mut options = Vec::with_capacity(options_size);
 
@@ -858,8 +898,12 @@ impl PressioOptions {
             // Safety:
             // - self.ptr is a valid pointer to options
             // - option_key is a valid options key
-            let option_ptr =
-                unsafe { libpressio_sys::pressio_options_get(self.ptr, option_key.as_ptr()) };
+            let option_ptr = unsafe {
+                libpressio_sys::pressio_options_get(
+                    self.ptr.as_ptr().cast_const(),
+                    option_key.as_ptr(),
+                )
+            };
             let option_key = option_key.into_string().unwrap_or(String::from("<error>"));
 
             // Safety: option_ptr is a valid pointer to an option
@@ -1009,11 +1053,24 @@ impl PressioOptions {
         Ok(BTreeMap::from_iter(options))
     }
 }
+
 impl Drop for PressioOptions {
     fn drop(&mut self) {
         unsafe {
-            libpressio_sys::pressio_options_free(self.ptr);
+            libpressio_sys::pressio_options_free(self.ptr.as_ptr());
         }
+    }
+}
+
+impl std::fmt::Display for PressioOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let msg = unsafe {
+            let ptr: *mut c_char = libpressio_sys::pressio_options_to_string(self.ptr.as_ptr());
+            let s = CStr::from_ptr(ptr).to_str().unwrap().to_string();
+            libc::free(ptr.cast());
+            s
+        };
+        write!(f, "{}", msg)
     }
 }
 
