@@ -121,6 +121,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rustc-link-lib=static=libpressio");
     if target.contains("-linux-") || target.ends_with("-linux") {
         println!("cargo:rustc-link-lib=dylib=stdc++");
+    } else if target.ends_with("-darwin") {
+        println!("cargo:rustc-link-lib=dylib=c++");
     }
     println!(
         "cargo::rustc-link-search=native={}",
