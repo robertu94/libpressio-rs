@@ -3,12 +3,13 @@
 #![allow(non_snake_case)]
 
 use std::{
+    borrow::Borrow,
     collections::BTreeMap,
     ffi::{CStr, CString, c_char, c_uchar, c_void},
     ptr::NonNull,
 };
 
-use ndarray::{Array, ArrayBase, ArrayView, DataMut, Dimension, IxDyn};
+use ndarray::{Array, ArrayBase, Data, Dimension, IxDyn};
 use thiserror::Error;
 
 #[derive(Debug, Clone, Error)]
@@ -402,130 +403,68 @@ impl PressioData {
         PressioData { data }
     }
 
-    pub fn new<T: PressioElement, D: Dimension>(x: Array<T, D>) -> Self {
-        Self::new_inner(x, <T as sealed::PressioElement>::DTYPE)
+    pub fn new_copied<T: PressioElement, S: Data<Elem = T>, D: Dimension>(
+        x: impl Borrow<ArrayBase<S, D>>,
+    ) -> Self {
+        Self::new_copied_inner(x.borrow(), <T as sealed::PressioElement>::DTYPE)
     }
 
-    pub fn new_bytes<D: Dimension>(x: Array<c_uchar, D>) -> Self {
-        Self::new_inner(x, libpressio_sys::pressio_dtype_pressio_byte_dtype)
+    pub fn new_bytes_copied<S: Data<Elem = c_uchar>, D: Dimension>(
+        x: impl Borrow<ArrayBase<S, D>>,
+    ) -> Self {
+        Self::new_copied_inner(x.borrow(), libpressio_sys::pressio_dtype_pressio_byte_dtype)
     }
 
-    fn new_inner<T: Copy, D: Dimension>(
-        x: Array<T, D>,
+    fn new_copied_inner<T: Copy, S: Data<Elem = T>, D: Dimension>(
+        x: &ArrayBase<S, D>,
         dtype: libpressio_sys::pressio_dtype,
     ) -> Self {
         let shape = x.shape().to_vec();
 
         let data = if x.is_standard_layout() {
-            let mut x = x;
-            let data_ptr = x.as_mut_ptr();
-            let box_ptr = Box::into_raw(Box::new(x));
-            let deleter: Box<Box<dyn FnOnce()>> = Box::new(Box::new(move || {
-                let abox: Box<Array<T, D>> = unsafe { Box::from_raw(box_ptr) };
-                std::mem::drop(abox);
-            }));
-            // FIXME: this still crashes when the data is accessed
-            unsafe {
-                libpressio_sys::pressio_data_new_move(
-                    dtype,
-                    data_ptr.cast(),
-                    shape.len(),
-                    shape.as_ptr(),
-                    Some(deleter_trampoline),
-                    Box::into_raw(deleter).cast(),
-                )
-            }
-        } else {
-            let mut x: Vec<T> = x.into_iter().collect();
-            let data_ptr = x.as_mut_ptr();
-            let box_ptr = Box::into_raw(Box::new(x));
-            let deleter: Box<Box<dyn FnOnce()>> = Box::new(Box::new(move || {
-                let vbox: Box<Vec<T>> = unsafe { Box::from_raw(box_ptr) };
-                std::mem::drop(vbox);
-            }));
-            unsafe {
-                libpressio_sys::pressio_data_new_move(
-                    dtype,
-                    data_ptr.cast(),
-                    shape.len(),
-                    shape.as_ptr(),
-                    Some(deleter_trampoline),
-                    Box::into_raw(deleter).cast(),
-                )
-            }
-        };
-        let data = NonNull::new(data).expect("pressio_data_new_move must not return null");
-        PressioData { data }
-    }
-
-    pub fn new_copied<T: PressioElement, D: Dimension>(x: ArrayView<T, D>) -> Self {
-        Self::new_copied_inner(x, <T as sealed::PressioElement>::DTYPE)
-    }
-
-    pub fn new_bytes_copied<D: Dimension>(x: ArrayView<c_uchar, D>) -> Self {
-        Self::new_copied_inner(x, libpressio_sys::pressio_dtype_pressio_byte_dtype)
-    }
-
-    fn new_copied_inner<T: Copy, D: Dimension>(
-        x: ArrayView<T, D>,
-        dtype: libpressio_sys::pressio_dtype,
-    ) -> Self {
-        let shape = x.shape().to_vec();
-
-        let data = if x.is_standard_layout() {
-            let data_ptr = x.as_ptr();
             unsafe {
                 libpressio_sys::pressio_data_new_copy(
                     dtype,
-                    data_ptr.cast(),
+                    x.as_ptr().cast(),
                     shape.len(),
                     shape.as_ptr(),
                 )
             }
         } else {
-            let mut x: Vec<T> = x.iter().copied().collect();
-            let data_ptr = x.as_mut_ptr();
-            let box_ptr = Box::into_raw(Box::new(x));
-            let deleter: Box<Box<dyn FnOnce()>> = Box::new(Box::new(move || {
-                let vbox: Box<Vec<T>> = unsafe { Box::from_raw(box_ptr) };
-                std::mem::drop(vbox);
-            }));
+            let x_vec: Vec<T> = x.iter().copied().collect();
             unsafe {
-                libpressio_sys::pressio_data_new_move(
+                libpressio_sys::pressio_data_new_copy(
                     dtype,
-                    data_ptr.cast(),
+                    x_vec.as_ptr().cast(),
                     shape.len(),
                     shape.as_ptr(),
-                    Some(deleter_trampoline),
-                    Box::into_raw(deleter).cast(),
                 )
             }
         };
-        #[expect(clippy::expect_fun_call)]
-        let data = NonNull::new(data).expect(if x.is_standard_layout() {
-            "pressio_data_new_copy must not return null"
-        } else {
-            "pressio_data_new_move must not return null"
-        });
+        let data = NonNull::new(data).expect("pressio_data_new_copy must not return null");
         PressioData { data }
     }
 
-    pub fn with_shared<T: PressioElement, S: DataMut<Elem = T>, D: Dimension, O>(
-        x: ArrayBase<S, D>,
+    pub fn new_with_shared<T: PressioElement, S: Data<Elem = T>, D: Dimension, O>(
+        x: impl Borrow<ArrayBase<S, D>>,
         with: impl for<'a> FnOnce(&'a Self) -> O,
     ) -> O {
-        Self::with_shared_inner(x, <T as sealed::PressioElement>::DTYPE, with)
+        Self::new_with_shared_inner(x.borrow(), <T as sealed::PressioElement>::DTYPE, with)
     }
 
-    pub fn with_bytes_shared<S: DataMut<Elem = c_uchar>, D: Dimension, O>(
-        x: ArrayBase<S, D>,
+    pub fn new_with_bytes_shared<S: Data<Elem = c_uchar>, D: Dimension, O>(
+        x: impl Borrow<ArrayBase<S, D>>,
         with: impl for<'a> FnOnce(&'a Self) -> O,
     ) -> O {
-        Self::with_shared_inner(x, libpressio_sys::pressio_dtype_pressio_byte_dtype, with)
+        Self::new_with_shared_inner(
+            x.borrow(),
+            libpressio_sys::pressio_dtype_pressio_byte_dtype,
+            with,
+        )
     }
 
-    fn with_shared_inner<T: Copy, S: DataMut<Elem = T>, D: Dimension, O>(
-        mut x: ArrayBase<S, D>,
+    fn new_with_shared_inner<T: Copy, S: Data<Elem = T>, D: Dimension, O>(
+        x: &ArrayBase<S, D>,
         dtype: libpressio_sys::pressio_dtype,
         with: impl for<'a> FnOnce(&'a Self) -> O,
     ) -> O {
@@ -533,7 +472,10 @@ impl PressioData {
             let data = unsafe {
                 libpressio_sys::pressio_data_new_nonowning(
                     dtype,
-                    x.as_mut_ptr().cast(),
+                    // SAFETY: we only give access to &PressioData, which does
+                    //         not expose mutating access, so we can cast a
+                    //         const ptr to a mut ptr here
+                    x.as_ptr().cast_mut().cast(),
                     x.ndim(),
                     x.shape().as_ptr(),
                 )
@@ -541,11 +483,14 @@ impl PressioData {
             let data = NonNull::new(data).expect("pressio_data_new_nonowning must not return null");
             with(&Self { data })
         } else {
-            let mut x_vec: Vec<T> = x.iter().copied().collect();
+            let x_vec: Vec<T> = x.iter().copied().collect();
             let data = unsafe {
                 libpressio_sys::pressio_data_new_nonowning(
                     dtype,
-                    x_vec.as_mut_ptr().cast(),
+                    // SAFETY: we only give access to &PressioData, which does
+                    //         not expose mutating access, so we can cast a
+                    //         const ptr to a mut ptr here
+                    x_vec.as_ptr().cast_mut().cast(),
                     x.ndim(),
                     x.shape().as_ptr(),
                 )
@@ -557,26 +502,43 @@ impl PressioData {
         }
     }
 
-    pub fn from_array(a: PressioArray) -> Self {
-        match a {
-            PressioArray::Byte(a) => Self::new_bytes(a),
-            PressioArray::Bool(a) => Self::new(a),
-            PressioArray::U8(a) => Self::new(a),
-            PressioArray::U16(a) => Self::new(a),
-            PressioArray::U32(a) => Self::new(a),
-            PressioArray::U64(a) => Self::new(a),
-            PressioArray::I8(a) => Self::new(a),
-            PressioArray::I16(a) => Self::new(a),
-            PressioArray::I32(a) => Self::new(a),
-            PressioArray::I64(a) => Self::new(a),
-            PressioArray::F32(a) => Self::new(a),
-            PressioArray::F64(a) => Self::new(a),
+    pub fn copied_from_array(a: impl AsRef<PressioArray>) -> Self {
+        fn copied_from_array_ref(a: &PressioArray) -> PressioData {
+            match a {
+                PressioArray::Byte(a) => PressioData::new_bytes_copied(a),
+                PressioArray::Bool(a) => PressioData::new_copied(a),
+                PressioArray::U8(a) => PressioData::new_copied(a),
+                PressioArray::U16(a) => PressioData::new_copied(a),
+                PressioArray::U32(a) => PressioData::new_copied(a),
+                PressioArray::U64(a) => PressioData::new_copied(a),
+                PressioArray::I8(a) => PressioData::new_copied(a),
+                PressioArray::I16(a) => PressioData::new_copied(a),
+                PressioArray::I32(a) => PressioData::new_copied(a),
+                PressioArray::I64(a) => PressioData::new_copied(a),
+                PressioArray::F32(a) => PressioData::new_copied(a),
+                PressioArray::F64(a) => PressioData::new_copied(a),
+            }
         }
+
+        copied_from_array_ref(a.as_ref())
     }
 
     pub fn clone_into_array(&self) -> Option<PressioArray> {
-        fn clone_into_array_typed<T: Copy>(ptr: *const T, shape: &[usize]) -> Array<T, IxDyn> {
-            unsafe { ArrayView::from_shape_ptr(shape, ptr) }.to_owned()
+        fn clone_into_array_typed<T: Copy>(ptr: *const c_void, shape: &[usize]) -> Array<T, IxDyn> {
+            let size: usize = shape.iter().product();
+            // copy the data into a new vector, ensuring that our copy is
+            // properly aligned, no matter the alignment in libpressio
+            let data = unsafe {
+                let mut data = Vec::<T>::with_capacity(size);
+                std::ptr::copy_nonoverlapping::<u8>(
+                    ptr.cast(),
+                    data.as_mut_ptr().cast(),
+                    std::mem::size_of::<T>() * size,
+                );
+                data.set_len(size);
+                data
+            };
+            unsafe { Array::from_shape_vec_unchecked(shape, data) }
         }
 
         if !self.has_data() {
@@ -598,44 +560,17 @@ impl PressioData {
         .cast_const();
 
         match dtype {
-            PressioDtype::Bool => Some(PressioArray::Bool(clone_into_array_typed(
-                ptr.cast(),
-                &shape,
-            ))),
+            PressioDtype::Bool => Some(PressioArray::Bool(clone_into_array_typed(ptr, &shape))),
             PressioDtype::U8 => Some(PressioArray::U8(clone_into_array_typed(ptr.cast(), &shape))),
-            PressioDtype::U16 => Some(PressioArray::U16(clone_into_array_typed(
-                ptr.cast(),
-                &shape,
-            ))),
-            PressioDtype::U32 => Some(PressioArray::U32(clone_into_array_typed(
-                ptr.cast(),
-                &shape,
-            ))),
-            PressioDtype::U64 => Some(PressioArray::U64(clone_into_array_typed(
-                ptr.cast(),
-                &shape,
-            ))),
-            PressioDtype::I8 => Some(PressioArray::I8(clone_into_array_typed(ptr.cast(), &shape))),
-            PressioDtype::I16 => Some(PressioArray::I16(clone_into_array_typed(
-                ptr.cast(),
-                &shape,
-            ))),
-            PressioDtype::I32 => Some(PressioArray::I32(clone_into_array_typed(
-                ptr.cast(),
-                &shape,
-            ))),
-            PressioDtype::I64 => Some(PressioArray::I64(clone_into_array_typed(
-                ptr.cast(),
-                &shape,
-            ))),
-            PressioDtype::F32 => Some(PressioArray::F32(clone_into_array_typed(
-                ptr.cast(),
-                &shape,
-            ))),
-            PressioDtype::F64 => Some(PressioArray::F64(clone_into_array_typed(
-                ptr.cast(),
-                &shape,
-            ))),
+            PressioDtype::U16 => Some(PressioArray::U16(clone_into_array_typed(ptr, &shape))),
+            PressioDtype::U32 => Some(PressioArray::U32(clone_into_array_typed(ptr, &shape))),
+            PressioDtype::U64 => Some(PressioArray::U64(clone_into_array_typed(ptr, &shape))),
+            PressioDtype::I8 => Some(PressioArray::I8(clone_into_array_typed(ptr, &shape))),
+            PressioDtype::I16 => Some(PressioArray::I16(clone_into_array_typed(ptr, &shape))),
+            PressioDtype::I32 => Some(PressioArray::I32(clone_into_array_typed(ptr, &shape))),
+            PressioDtype::I64 => Some(PressioArray::I64(clone_into_array_typed(ptr, &shape))),
+            PressioDtype::F32 => Some(PressioArray::F32(clone_into_array_typed(ptr, &shape))),
+            PressioDtype::F64 => Some(PressioArray::F64(clone_into_array_typed(ptr, &shape))),
             PressioDtype::Byte => Some(PressioArray::Byte(clone_into_array_typed(
                 ptr.cast(),
                 &shape,
@@ -678,11 +613,6 @@ impl PressioData {
     pub fn ndim(&self) -> usize {
         unsafe { libpressio_sys::pressio_data_num_dimensions(self.data.as_ptr().cast_const()) }
     }
-}
-
-unsafe extern "C" fn deleter_trampoline(_data_ptr: *mut c_void, fn_ptr: *mut c_void) {
-    let deleter: Box<Box<dyn FnOnce()>> = unsafe { Box::from_raw(fn_ptr.cast()) };
-    deleter()
 }
 
 impl Clone for PressioData {
@@ -1186,7 +1116,7 @@ mod tests {
             Box::new(|input_pdata, compressor| {
                 let decompressed_data = input_pdata.clone();
                 let compressed_data = PressioData::new_empty(PressioDtype::Byte, []);
-                let compressed_data = compressor.compress(&input_pdata, compressed_data)?;
+                let compressed_data = compressor.compress(input_pdata, compressed_data)?;
                 Ok((compressed_data, decompressed_data))
             }),
         )?;
@@ -1199,20 +1129,14 @@ mod tests {
         Ok(())
     }
 
-    // FIXME: PressioData::new should work as well
-    // #[test]
-    // fn safe_works_moved() -> Result<(), PressioError> {
-    //     safe_works(|x| PressioData::new(x))
-    // }
-
     #[test]
     fn safe_works_copied() -> Result<(), PressioError> {
-        safe_works(|x, compressor, with| with(&PressioData::new_copied(x.view()), compressor))
+        safe_works(|x, compressor, with| with(&PressioData::new_copied(x), compressor))
     }
 
     #[test]
     fn safe_works_with_shared() -> Result<(), PressioError> {
-        safe_works(|x, compressor, with| PressioData::with_shared(x, |x| with(x, compressor)))
+        safe_works(|x, compressor, with| PressioData::new_with_shared(x, |x| with(x, compressor)))
     }
 
     #[test]
@@ -1220,8 +1144,7 @@ mod tests {
         let mut lib = Pressio::new()?;
         let mut compressor = lib.get_compressor("noop")?;
 
-        // FIXME: PressioData::new should work as well
-        let data = PressioData::new_copied::<i64, _>(ndarray::array![1, 2, 3, 4, 5].view());
+        let data = PressioData::new_copied(ndarray::array![1_i64, 2, 3, 4, 5]);
         assert!(data.has_data());
         assert_eq!(data.dtype(), Some(PressioDtype::I64));
         assert_eq!(data.len(), 5);
