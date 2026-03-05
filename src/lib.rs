@@ -8,7 +8,7 @@ use std::{
     ptr::NonNull,
 };
 
-use ndarray::{Array, ArrayView, Dimension, IxDyn};
+use ndarray::{Array, ArrayBase, ArrayView, DataMut, Dimension, IxDyn};
 use thiserror::Error;
 
 #[derive(Debug, Clone, Error)]
@@ -508,6 +508,53 @@ impl PressioData {
             "pressio_data_new_move must not return null"
         });
         PressioData { data }
+    }
+
+    pub fn with_shared<T: PressioElement, S: DataMut<Elem = T>, D: Dimension, O>(
+        x: ArrayBase<S, D>,
+        with: impl for<'a> FnOnce(&'a Self) -> O,
+    ) -> O {
+        Self::with_shared_inner(x, <T as sealed::PressioElement>::DTYPE, with)
+    }
+
+    pub fn with_bytes_shared<S: DataMut<Elem = c_uchar>, D: Dimension, O>(
+        x: ArrayBase<S, D>,
+        with: impl for<'a> FnOnce(&'a Self) -> O,
+    ) -> O {
+        Self::with_shared_inner(x, libpressio_sys::pressio_dtype_pressio_byte_dtype, with)
+    }
+
+    fn with_shared_inner<T: Copy, S: DataMut<Elem = T>, D: Dimension, O>(
+        mut x: ArrayBase<S, D>,
+        dtype: libpressio_sys::pressio_dtype,
+        with: impl for<'a> FnOnce(&'a Self) -> O,
+    ) -> O {
+        if x.is_standard_layout() {
+            let data = unsafe {
+                libpressio_sys::pressio_data_new_nonowning(
+                    dtype,
+                    x.as_mut_ptr().cast(),
+                    x.ndim(),
+                    x.shape().as_ptr(),
+                )
+            };
+            let data = NonNull::new(data).expect("pressio_data_new_nonowning must not return null");
+            with(&Self { data })
+        } else {
+            let mut x_vec: Vec<T> = x.iter().copied().collect();
+            let data = unsafe {
+                libpressio_sys::pressio_data_new_nonowning(
+                    dtype,
+                    x_vec.as_mut_ptr().cast(),
+                    x.ndim(),
+                    x.shape().as_ptr(),
+                )
+            };
+            let data = NonNull::new(data).expect("pressio_data_new_nonowning must not return null");
+            let result = with(&Self { data });
+            std::mem::drop(x_vec);
+            result
+        }
     }
 
     pub fn from_array(a: PressioArray) -> Self {
@@ -1106,8 +1153,18 @@ mod tests {
         ndarray::Array2::from_shape_fn((30, 30), |(x, y)| (x + y) as f32).into_dyn()
     }
 
-    #[test]
-    fn safe_works() -> Result<(), PressioError> {
+    fn safe_works(
+        ndarray_to_data: impl Fn(
+            ndarray::ArrayD<f32>,
+            &mut PressioCompressor,
+            Box<
+                dyn FnOnce(
+                    &PressioData,
+                    &mut PressioCompressor,
+                ) -> Result<(PressioData, PressioData), PressioError>,
+            >,
+        ) -> Result<(PressioData, PressioData), PressioError>,
+    ) -> Result<(), PressioError> {
         let mut lib = Pressio::new()?;
         eprintln!("supported compressors: {:?}", lib.supported_compressors());
         let mut compressor = lib.get_compressor("pressio")?;
@@ -1119,22 +1176,43 @@ mod tests {
                 PressioOption::string(Some("size".to_string())),
             )?;
 
-        // FIXME: PressioData::new should work as well
-        let input_pdata = PressioData::new_copied(input_data().view());
-        let compressed_data = PressioData::new_empty(PressioDtype::Byte, []);
-        let decompressed_data = input_pdata.clone();
-
         compressor.set_options(&options)?;
         let options = compressor.get_options()?;
         println!("{}", options);
 
-        let compressed_data = compressor.compress(&input_pdata, compressed_data)?;
+        let (compressed_data, decompressed_data) = ndarray_to_data(
+            input_data(),
+            &mut compressor,
+            Box::new(|input_pdata, compressor| {
+                let decompressed_data = input_pdata.clone();
+                let compressed_data = PressioData::new_empty(PressioDtype::Byte, []);
+                let compressed_data = compressor.compress(&input_pdata, compressed_data)?;
+                Ok((compressed_data, decompressed_data))
+            }),
+        )?;
+
         let _decompressed_data = compressor.decompress(&compressed_data, decompressed_data)?;
 
         let metric_results = compressor.get_metric_results()?;
         println!("{}", metric_results);
 
         Ok(())
+    }
+
+    // FIXME: PressioData::new should work as well
+    // #[test]
+    // fn safe_works_moved() -> Result<(), PressioError> {
+    //     safe_works(|x| PressioData::new(x))
+    // }
+
+    #[test]
+    fn safe_works_copied() -> Result<(), PressioError> {
+        safe_works(|x, compressor, with| with(&PressioData::new_copied(x.view()), compressor))
+    }
+
+    #[test]
+    fn safe_works_with_shared() -> Result<(), PressioError> {
+        safe_works(|x, compressor, with| PressioData::with_shared(x, |x| with(x, compressor)))
     }
 
     #[test]
