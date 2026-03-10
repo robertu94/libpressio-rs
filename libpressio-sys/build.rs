@@ -116,6 +116,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     libpressio_config.define("CMAKE_PREFIX_PATH", stdcompat_out);
     libpressio_config.define("LIBPRESSIO_BUILD_MODE", "FULL");
+    libpressio_config.define(
+        "LIBPRESSIO_WITH_EXTERNAL",
+        if target.contains("wasm") { "OFF" } else { "ON" },
+    );
     let libpressio_out = libpressio_config.build();
 
     println!("cargo:rustc-link-lib=static=libpressio");
