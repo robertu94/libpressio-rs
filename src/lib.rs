@@ -9,7 +9,7 @@ use std::{
     ptr::NonNull,
 };
 
-use ndarray::{Array, ArrayBase, Data, Dimension, IxDyn};
+use ndarray::{Array, ArrayBase, ArrayView, CowArray, Data, Dimension, IxDyn};
 use thiserror::Error;
 
 #[derive(Debug, Clone, Error)]
@@ -245,6 +245,14 @@ impl PressioCompressor {
             Some(ptr) => Ok(PressioOptions { ptr }),
             None => Err(self.get_error()),
         }
+    }
+
+    pub fn set_name(&mut self, name: impl AsRef<str>) -> Result<(), PressioError> {
+        let name = CString::new(name.as_ref())?;
+        unsafe {
+            libpressio_sys::pressio_compressor_set_name(self.ptr.as_ptr(), name.as_ptr());
+        }
+        Ok(())
     }
 
     fn get_error(&self) -> PressioError {
@@ -523,6 +531,77 @@ impl PressioData {
         copied_from_array_ref(a.as_ref())
     }
 
+    pub fn with_shared<T: PressioElement, D: Dimension, O>(
+        &self,
+        shape: impl Into<D>,
+        with: impl for<'a> FnOnce(CowArray<'a, T, D>) -> O,
+    ) -> Option<O> {
+        self.with_shared_inner(shape, with, <T as sealed::PressioElement>::DTYPE)
+    }
+
+    pub fn with_shared_bytes<D: Dimension, O>(
+        &self,
+        shape: impl Into<D>,
+        with: impl for<'a> FnOnce(CowArray<'a, c_uchar, D>) -> O,
+    ) -> Option<O> {
+        self.with_shared_inner(
+            shape,
+            with,
+            libpressio_sys::pressio_dtype_pressio_byte_dtype,
+        )
+    }
+
+    fn with_shared_inner<T: Copy, D: Dimension, O>(
+        &self,
+        shape_out: impl Into<D>,
+        with: impl for<'a> FnOnce(CowArray<'a, T, D>) -> O,
+        dtype_out: libpressio_sys::pressio_dtype,
+    ) -> Option<O> {
+        if !self.has_data() {
+            return None;
+        }
+
+        let dtype = self.dtype()?;
+
+        if dtype.to_dtype() != dtype_out {
+            return None;
+        }
+
+        let shape_out = shape_out.into();
+        let shape = self.shape();
+
+        if ArrayView::from(shape.as_slice()) != shape_out.as_array_view() {
+            return None;
+        }
+
+        let mut num_bytes = 0;
+        let ptr = unsafe {
+            libpressio_sys::pressio_data_ptr(self.data.as_ptr().cast_const(), &raw mut num_bytes)
+        }
+        .cast_const()
+        .cast::<T>();
+
+        if ptr.is_aligned() {
+            // SAFETY: the data is aligned
+            let data = unsafe { ArrayView::from_shape_ptr(shape_out, ptr) };
+            return Some(with(CowArray::from(data)));
+        }
+
+        // copy the data into a new vector, ensuring that our copy is
+        // properly aligned, no matter the alignment in libpressio
+        let data = unsafe {
+            let mut data = Vec::<T>::with_capacity(shape_out.size());
+            std::ptr::copy_nonoverlapping::<u8>(
+                ptr.cast(),
+                data.as_mut_ptr().cast(),
+                std::mem::size_of::<T>() * shape_out.size(),
+            );
+            data.set_len(shape_out.size());
+            Array::from_shape_vec_unchecked(shape_out, data)
+        };
+        Some(with(CowArray::from(data)))
+    }
+
     pub fn clone_into_array(&self) -> Option<PressioArray> {
         fn clone_into_array_typed<T: Copy>(ptr: *const c_void, shape: &[usize]) -> Array<T, IxDyn> {
             let size: usize = shape.iter().product();
@@ -546,12 +625,7 @@ impl PressioData {
         }
 
         let dtype = self.dtype()?;
-
-        let shape = (0..self.ndim())
-            .map(|i| unsafe {
-                libpressio_sys::pressio_data_get_dimension(self.data.as_ptr().cast_const(), i)
-            })
-            .collect::<Vec<_>>();
+        let shape = self.shape();
 
         let mut num_bytes = 0;
         let ptr = unsafe {
@@ -612,6 +686,14 @@ impl PressioData {
 
     pub fn ndim(&self) -> usize {
         unsafe { libpressio_sys::pressio_data_num_dimensions(self.data.as_ptr().cast_const()) }
+    }
+
+    pub fn shape(&self) -> Vec<usize> {
+        (0..self.ndim())
+            .map(|i| unsafe {
+                libpressio_sys::pressio_data_get_dimension(self.data.as_ptr().cast_const(), i)
+            })
+            .collect::<Vec<_>>()
     }
 }
 
