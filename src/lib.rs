@@ -1631,6 +1631,11 @@ impl<'a> Iterator for PressioOptionsIter<'a> {
         // Safety: option_ptr is a valid pointer to an option
         unsafe { libpressio_sys::pressio_option_free(option_ptr) };
 
+        // Safety: options_iter is a valid options iterator
+        unsafe {
+            libpressio_sys::pressio_options_iter_next(self.as_raw_mut());
+        }
+
         Some((option_key, option))
     }
 }
