@@ -1042,8 +1042,8 @@ impl PressioOption {
                 }
                 Self::vec_string(Some(x)) => {
                     let option_value = x
-                        .iter()
-                        .map(|val: &String| CString::new(val.clone()))
+                        .into_iter()
+                        .map(CString::new)
                         .collect::<Result<Vec<CString>, _>>()?;
                     let mut option_value_cptr: Vec<*const i8> =
                         option_value.iter().map(|val| val.as_ptr()).collect();
@@ -1275,7 +1275,7 @@ impl PressioOption {
                 }))
             }
             libpressio_sys::pressio_option_type_pressio_option_charptr_array_type => {
-                Some(Self::string(if option_has_value {
+                Some(Self::vec_string(if option_has_value {
                     let mut len = 0;
                     let ptr = unsafe {
                         libpressio_sys::pressio_option_get_strings(option_ptr, &raw mut len)
