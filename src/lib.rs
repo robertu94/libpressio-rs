@@ -218,13 +218,13 @@ impl PressioCompressor {
     pub fn compress(
         &mut self,
         input_data: &PressioData,
-        compressed_data: PressioData,
+        mut compressed_data: PressioData,
     ) -> Result<PressioData, PressioError> {
         let rc = unsafe {
             libpressio_sys::pressio_compressor_compress(
                 self.as_raw_mut(),
-                input_data.data.as_ptr().cast_const(),
-                compressed_data.data.as_ptr(),
+                input_data.as_raw(),
+                compressed_data.as_raw_mut(),
             )
         };
         if rc == 0 {
@@ -237,13 +237,13 @@ impl PressioCompressor {
     pub fn decompress(
         &mut self,
         compressed_data: &PressioData,
-        decompressed_data: PressioData,
+        mut decompressed_data: PressioData,
     ) -> Result<PressioData, PressioError> {
         let rc = unsafe {
             libpressio_sys::pressio_compressor_decompress(
                 self.as_raw_mut(),
-                compressed_data.data.as_ptr().cast_const(),
-                decompressed_data.data.as_ptr(),
+                compressed_data.as_raw(),
+                decompressed_data.as_raw_mut(),
             )
         };
         if rc == 0 {
@@ -1053,8 +1053,8 @@ impl PressioOption {
                         option_value_cptr.len(),
                     );
                 }
-                Self::data(Some(x)) => {
-                    let data_ptr = x.data.as_ptr();
+                Self::data(Some(mut x)) => {
+                    let data_ptr = x.as_raw_mut();
                     std::mem::forget(x);
                     libpressio_sys::pressio_option_set_data(option.as_ptr(), data_ptr);
                 }
