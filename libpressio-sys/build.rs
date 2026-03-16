@@ -1,4 +1,4 @@
-use std::{env, path::PathBuf};
+use std::{env, ffi::OsString, path::PathBuf};
 
 #[derive(Debug)]
 struct CargoCallBacksIngoreGeneratedFiles {
@@ -114,7 +114,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "OFF"
         },
     );
-    libpressio_config.define("CMAKE_PREFIX_PATH", stdcompat_out);
+
+    let mut cmake_prefix_path = OsString::from(stdcompat_out);
+    if cfg!(feature = "bzip2") {
+        let bzip2_root = env::var("DEP_BZIP2_ROOT")
+            .map(PathBuf::from)
+            .expect("missing bzip2 dependency");
+        cmake_prefix_path.push(";");
+        cmake_prefix_path.push(bzip2_root);
+        libpressio_config.define("LIBPRESSIO_HAS_BZIP2", "ON");
+    } else {
+        libpressio_config.define("LIBPRESSIO_HAS_BZIP2", "OFF");
+    }
+    libpressio_config.define("CMAKE_PREFIX_PATH", cmake_prefix_path);
+
     libpressio_config.define("LIBPRESSIO_BUILD_MODE", "FULL");
     libpressio_config.define(
         "LIBPRESSIO_WITH_EXTERNAL",
@@ -122,7 +135,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     let libpressio_out = libpressio_config.build();
 
-    println!("cargo:rustc-link-lib=static=libpressio");
     if target.contains("-linux-") || target.ends_with("-linux") {
         println!("cargo:rustc-link-lib=dylib=stdc++");
     } else if target.ends_with("-darwin") {

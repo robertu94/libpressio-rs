@@ -16,6 +16,7 @@ libpressio-sys = { version = "0.1", path = "libpressio-sys", default-features = 
 # crates.io third-party dependencies
 anyhow = { version = "1.0.93", default-features = false }
 bindgen = { version = "0.71", default-features = false }
+bzip2-sys = { version = "0.1.12", default-features = false }
 cmake = { version = "0.1.26", default-features = false }
 libc = { version = "0.2", default-features = false }
 ndarray = { version = "0.16.1", default-features = false }
@@ -35,6 +36,7 @@ categories = ["api-bindings", "compression", "encoding"]
 keywords = ["libpressio", "compression", "encoding"]
 
 [features]
+bzip2 = ["libpressio-sys/bzip2"]
 openmp = ["libpressio-sys/openmp"]
 
 [dependencies]

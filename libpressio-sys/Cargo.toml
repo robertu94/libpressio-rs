@@ -12,8 +12,12 @@ categories = ["api-bindings", "compression", "encoding"]
 keywords = ["libpressio", "bindgen", "compression", "encoding"]
 
 [features]
+bzip2 = ["bzip2-sys"]
 # For now, enabling the `openmp` feature assumes that OpenMP is pre-installed
 openmp = []
+
+[dependencies]
+bzip2-sys = { workspace = true, features = ["static"], optional = true }
 
 [build-dependencies]
 anyhow = { workspace = true }
