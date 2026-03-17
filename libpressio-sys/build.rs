@@ -1,37 +1,5 @@
 use std::{env, ffi::OsString, path::PathBuf};
 
-#[derive(Debug)]
-struct CargoCallBacksIngoreGeneratedFiles {
-    cargo_callbacks: bindgen::CargoCallbacks,
-    files: std::vec::Vec<regex::Regex>,
-}
-impl CargoCallBacksIngoreGeneratedFiles {
-    fn new<'a, T>(files: T) -> Result<CargoCallBacksIngoreGeneratedFiles, anyhow::Error>
-    where
-        T: IntoIterator<Item = &'a str>,
-    {
-        Ok(CargoCallBacksIngoreGeneratedFiles {
-            cargo_callbacks: bindgen::CargoCallbacks::new(),
-            files: Vec::from_iter(files.into_iter().map(|v| regex::Regex::new(v).unwrap())),
-        })
-    }
-}
-impl bindgen::callbacks::ParseCallbacks for CargoCallBacksIngoreGeneratedFiles {
-    fn header_file(&self, filename: &str) {
-        if !self.files.iter().any(|f| f.is_match(filename)) {
-            self.cargo_callbacks.header_file(filename)
-        }
-    }
-    fn include_file(&self, filename: &str) {
-        if !self.files.iter().any(|f| f.is_match(filename)) {
-            self.cargo_callbacks.include_file(filename)
-        }
-    }
-    fn read_env_var(&self, filename: &str) {
-        self.cargo_callbacks.read_env_var(filename)
-    }
-}
-
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo::rerun-if-changed=build.rs");
     println!("cargo::rerun-if-changed=wrapper.h");
@@ -48,27 +16,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Configure std_compat, the compiler portability layer
     // ---------------------------------------------------------
     let mut stdcompat_config = cmake::Config::new("std_compat");
-    if let Ok(ar) = env::var("AR") {
-        stdcompat_config.define("CMAKE_AR", ar);
-    }
-    if let Ok(ld) = env::var("LD") {
-        stdcompat_config.define("CMAKE_LINKER", ld);
-    }
-    if let Ok(nm) = env::var("NM") {
-        stdcompat_config.define("CMAKE_NM", nm);
-    }
-    if let Ok(objdump) = env::var("OBJDUMP") {
-        stdcompat_config.define("CMAKE_OBJDUMP", objdump);
-    }
-    if let Ok(ranlib) = env::var("RANLIB") {
-        stdcompat_config.define("CMAKE_RANLIB", ranlib);
-    }
-    if let Ok(strip) = env::var("STRIP") {
-        stdcompat_config.define("CMAKE_STRIP", strip);
-    }
-    //prefer static libraries for RUST
+    configure_cmake_tools(&mut stdcompat_config);
+    // prefer static libraries for Rust
     stdcompat_config.define("BUILD_SHARED_LIBS", "OFF");
-    //disable testing to avoid google-test dependency
+    // disable testing to avoid google-test dependency
     stdcompat_config.define("BUILD_TESTING", "OFF");
     // require a C++17 compiler (e.g. gcc 12 or later) for now
     // this includes Ubuntu 24.04 and later, Fedora, Nyx, et al
@@ -82,28 +33,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         stdcompat_out.display()
     );
 
+    let sol2_out = if cfg!(feature = "lua") {
+        let lua_root = env::var("DEP_LUA_ROOT")
+            .map(PathBuf::from)
+            .expect("missing lua dependency");
+        // ---------------------------------------------------------
+        // Configure sol2
+        // ---------------------------------------------------------
+        let mut sol2_config = cmake::Config::new("sol2");
+        configure_cmake_tools(&mut sol2_config);
+        sol2_config.define("SOL2_ENABLE_INSTALL", "ON");
+        sol2_config.define("SOL2_BUILD_LUA", "OFF");
+        sol2_config.define("SOL2_LUA_VERSION", "5.4");
+        sol2_config.define("CMAKE_PREFIX_PATH", lua_root);
+        Some(sol2_config.build())
+    } else {
+        None
+    };
+
     // ---------------------------------------------------------
     // Configure libpressio
     // ---------------------------------------------------------
     let mut libpressio_config = cmake::Config::new("libpressio");
-    if let Ok(ar) = env::var("AR") {
-        libpressio_config.define("CMAKE_AR", ar);
-    }
-    if let Ok(ld) = env::var("LD") {
-        libpressio_config.define("CMAKE_LINKER", ld);
-    }
-    if let Ok(nm) = env::var("NM") {
-        libpressio_config.define("CMAKE_NM", nm);
-    }
-    if let Ok(objdump) = env::var("OBJDUMP") {
-        libpressio_config.define("CMAKE_OBJDUMP", objdump);
-    }
-    if let Ok(ranlib) = env::var("RANLIB") {
-        libpressio_config.define("CMAKE_RANLIB", ranlib);
-    }
-    if let Ok(strip) = env::var("STRIP") {
-        libpressio_config.define("CMAKE_STRIP", strip);
-    }
+    configure_cmake_tools(&mut libpressio_config);
     libpressio_config.define("BUILD_SHARED_LIBS", "OFF");
     libpressio_config.define("BUILD_TESTING", "OFF");
     libpressio_config.define(
@@ -115,18 +67,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
     );
 
-    let mut cmake_prefix_path = OsString::from(stdcompat_out);
+    let mut libpressio_cmake_prefix_path = OsString::from(stdcompat_out);
     if cfg!(feature = "bzip2") {
         let bzip2_root = env::var("DEP_BZIP2_ROOT")
             .map(PathBuf::from)
             .expect("missing bzip2 dependency");
-        cmake_prefix_path.push(";");
-        cmake_prefix_path.push(bzip2_root);
+        libpressio_cmake_prefix_path.push(";");
+        libpressio_cmake_prefix_path.push(bzip2_root);
         libpressio_config.define("LIBPRESSIO_HAS_BZIP2", "ON");
     } else {
         libpressio_config.define("LIBPRESSIO_HAS_BZIP2", "OFF");
     }
-    libpressio_config.define("CMAKE_PREFIX_PATH", cmake_prefix_path);
+    if let Some(sol2_out) = sol2_out {
+        libpressio_cmake_prefix_path.push(";");
+        libpressio_cmake_prefix_path.push(sol2_out);
+        let lua_root = env::var("DEP_LUA_ROOT")
+            .map(PathBuf::from)
+            .expect("missing lua dependency");
+        libpressio_cmake_prefix_path.push(";");
+        libpressio_cmake_prefix_path.push(lua_root);
+        libpressio_config.define("LIBPRESSIO_HAS_LUA", "ON");
+    } else {
+        libpressio_config.define("LIBPRESSIO_HAS_LUA", "OFF");
+    }
+    libpressio_config.define("CMAKE_PREFIX_PATH", libpressio_cmake_prefix_path);
 
     libpressio_config.define("LIBPRESSIO_BUILD_MODE", "FULL");
     libpressio_config.define(
@@ -190,4 +154,59 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .write_to_file(out_dir.join("bindings.rs"))
         .expect("Couldn't write bindings!");
     Ok(())
+}
+
+#[derive(Debug)]
+struct CargoCallBacksIngoreGeneratedFiles {
+    cargo_callbacks: bindgen::CargoCallbacks,
+    files: std::vec::Vec<regex::Regex>,
+}
+
+impl CargoCallBacksIngoreGeneratedFiles {
+    fn new<'a, T>(files: T) -> Result<CargoCallBacksIngoreGeneratedFiles, anyhow::Error>
+    where
+        T: IntoIterator<Item = &'a str>,
+    {
+        Ok(CargoCallBacksIngoreGeneratedFiles {
+            cargo_callbacks: bindgen::CargoCallbacks::new(),
+            files: Vec::from_iter(files.into_iter().map(|v| regex::Regex::new(v).unwrap())),
+        })
+    }
+}
+
+impl bindgen::callbacks::ParseCallbacks for CargoCallBacksIngoreGeneratedFiles {
+    fn header_file(&self, filename: &str) {
+        if !self.files.iter().any(|f| f.is_match(filename)) {
+            self.cargo_callbacks.header_file(filename)
+        }
+    }
+    fn include_file(&self, filename: &str) {
+        if !self.files.iter().any(|f| f.is_match(filename)) {
+            self.cargo_callbacks.include_file(filename)
+        }
+    }
+    fn read_env_var(&self, filename: &str) {
+        self.cargo_callbacks.read_env_var(filename)
+    }
+}
+
+fn configure_cmake_tools(config: &mut cmake::Config) {
+    if let Ok(ar) = env::var("AR") {
+        config.define("CMAKE_AR", ar);
+    }
+    if let Ok(ld) = env::var("LD") {
+        config.define("CMAKE_LINKER", ld);
+    }
+    if let Ok(nm) = env::var("NM") {
+        config.define("CMAKE_NM", nm);
+    }
+    if let Ok(objdump) = env::var("OBJDUMP") {
+        config.define("CMAKE_OBJDUMP", objdump);
+    }
+    if let Ok(ranlib) = env::var("RANLIB") {
+        config.define("CMAKE_RANLIB", ranlib);
+    }
+    if let Ok(strip) = env::var("STRIP") {
+        config.define("CMAKE_STRIP", strip);
+    }
 }
