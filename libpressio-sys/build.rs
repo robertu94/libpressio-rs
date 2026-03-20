@@ -122,7 +122,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let bindings = bindgen::Builder::default()
         .clang_arg("-x")
         .clang_arg("c++")
-        .clang_arg("-std=c++11")
+        .clang_arg("-std=c++17")
         .clang_arg(format!(
             "-I{}",
             libpressio_out.join("include").join("libpressio").display()
@@ -141,7 +141,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .derive_ord(false)
         .derive_partialeq(false)
         .derive_partialord(false)
-        // MSRV 1.85
+        // MSRV 1.85: must match the workspace rust-version
         .rust_target(match bindgen::RustTarget::stable(85, 0) {
             Ok(target) => target,
             #[expect(clippy::panic)]
