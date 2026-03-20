@@ -1575,6 +1575,12 @@ impl PressioOptions {
 
         PressioOptionsIter {
             ptr,
+            // the _marker inherits the lifetimes of &self
+            //  (see the +'_ in the return signature)
+            // to ensure that
+            // - self must outlive the returned PressioOptionsIter
+            // - self is immutably borrowed until the PressioOptionsIter is
+            //   dropped
             _marker: PhantomData,
         }
     }
@@ -1621,6 +1627,12 @@ struct PressioOptionsIter<'a> {
     // - impl Send below
     // - impl !Sync from NonNull
     ptr: NonNull<libpressio_sys::pressio_options_iter>,
+    // pressio_options_iter borrows the pressio_options to ensure that the
+    //  options cannot be mutated while iterating
+    // the marker ensures that the PressioOptions that this PressioOptionsIter
+    //  was derived from
+    // - must outlive this PressioOptionsIter
+    // - is immutably borrowed until this PressioOptionsIter is dropped
     _marker: PhantomData<&'a PressioOptions>,
 }
 
