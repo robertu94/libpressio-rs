@@ -25,20 +25,25 @@ pub struct PressioError {
     pub message: String,
 }
 
-impl From<std::str::Utf8Error> for PressioError {
-    fn from(_: std::str::Utf8Error) -> Self {
-        PressioError {
+impl PressioError {
+    fn utf8_error(_err: std::str::Utf8Error, context: &str) -> Self {
+        Self {
             error_code: 2,
-            message: String::from("utf8 error"),
+            message: format!("invalid UTF-8 in {context}"),
         }
     }
-}
 
-impl From<std::ffi::NulError> for PressioError {
-    fn from(_: std::ffi::NulError) -> Self {
+    fn alloc_error(context: &str) -> Self {
         PressioError {
             error_code: 1,
-            message: String::from("nul error"),
+            message: format!("failed to allocate {context}"),
+        }
+    }
+
+    fn null_error(_err: std::ffi::NulError, context: &str) -> Self {
+        PressioError {
+            error_code: 1,
+            message: format!("invalid null byte in {context}"),
         }
     }
 }
@@ -63,21 +68,23 @@ pub fn supported_compressors() -> Result<Vec<&'static str>, PressioError> {
         unsafe { CStr::from_ptr(libpressio_sys::pressio_supported_compressors()) };
 
     Ok(supported_compressors
-        .to_str()?
+        .to_str()
+        .map_err(|err| PressioError::utf8_error(err, "compressor id"))?
         .split(' ')
         .map(str::trim)
         .filter(|x| !x.is_empty())
         .collect())
 }
 
-pub fn supported_io() -> Result<Vec<&'static str>, PressioError> {
+pub fn supported_io_modules() -> Result<Vec<&'static str>, PressioError> {
     // Safety:
     // - pressio_supported_io_modules is safe to call
     // - the returned pointer has 'static lifetime
     let supported_io = unsafe { CStr::from_ptr(libpressio_sys::pressio_supported_io_modules()) };
 
     Ok(supported_io
-        .to_str()?
+        .to_str()
+        .map_err(|err| PressioError::utf8_error(err, "io module id"))?
         .split(' ')
         .map(str::trim)
         .filter(|x| !x.is_empty())
@@ -91,7 +98,8 @@ pub fn supported_metrics() -> Result<Vec<&'static str>, PressioError> {
     let supported_metrics = unsafe { CStr::from_ptr(libpressio_sys::pressio_supported_metrics()) };
 
     Ok(supported_metrics
-        .to_str()?
+        .to_str()
+        .map_err(|err| PressioError::utf8_error(err, "metric id"))?
         .split(' ')
         .map(str::trim)
         .filter(|x| !x.is_empty())
@@ -105,7 +113,8 @@ pub fn features() -> Result<Vec<&'static str>, PressioError> {
     let features = unsafe { CStr::from_ptr(libpressio_sys::pressio_features()) };
 
     Ok(features
-        .to_str()?
+        .to_str()
+        .map_err(|err| PressioError::utf8_error(err, "feature"))?
         .split(' ')
         .map(str::trim)
         .filter(|x| !x.is_empty())
@@ -131,7 +140,7 @@ impl Pressio {
             Some(library) => Ok(Pressio { library }),
             None => Err(PressioError {
                 error_code: 1,
-                message: "failed to init library".to_string(),
+                message: String::from("failed to initialize libpressio"),
             }),
         }
     }
@@ -140,7 +149,8 @@ impl Pressio {
         &mut self,
         id: S,
     ) -> Result<PressioCompressor, PressioError> {
-        let id = CString::new(id.as_ref())?;
+        let id = CString::new(id.as_ref())
+            .map_err(|err| PressioError::null_error(err, "compressor id"))?;
         let ptr =
             unsafe { libpressio_sys::pressio_get_compressor(self.library.as_ptr(), id.as_ptr()) };
         let Some(ptr) = NonNull::new(ptr) else {
@@ -188,9 +198,9 @@ impl Pressio {
         match message {
             Ok(message) => PressioError {
                 error_code,
-                message: message.to_string(),
+                message: String::from(message),
             },
-            Err(e) => e.into(),
+            Err(err) => PressioError::utf8_error(err, "pressio error message"),
         }
     }
 }
@@ -325,11 +335,13 @@ impl PressioCompressor {
     pub fn get_name(&self) -> Result<&str, PressioError> {
         let name_ptr = unsafe { libpressio_sys::pressio_compressor_get_name(self.as_raw()) };
         let name = unsafe { CStr::from_ptr(name_ptr) };
-        name.to_str().map_err(PressioError::from)
+        name.to_str()
+            .map_err(|err| PressioError::utf8_error(err, "compressor name"))
     }
 
     pub fn set_name(&mut self, name: impl AsRef<str>) -> Result<(), PressioError> {
-        let name = CString::new(name.as_ref())?;
+        let name = CString::new(name.as_ref())
+            .map_err(|err| PressioError::null_error(err, "compressor name"))?;
         unsafe {
             libpressio_sys::pressio_compressor_set_name(self.as_raw_mut(), name.as_ptr());
         }
@@ -339,7 +351,9 @@ impl PressioCompressor {
     pub fn get_prefix(&self) -> Result<&str, PressioError> {
         let prefix_ptr = unsafe { libpressio_sys::pressio_compressor_get_prefix(self.as_raw()) };
         let prefix = unsafe { CStr::from_ptr(prefix_ptr) };
-        prefix.to_str().map_err(PressioError::from)
+        prefix
+            .to_str()
+            .map_err(|err| PressioError::utf8_error(err, "compressor id"))
     }
 
     pub fn major_version(&self) -> c_int {
@@ -357,7 +371,9 @@ impl PressioCompressor {
     pub fn get_version(&self) -> Result<&str, PressioError> {
         let version_ptr = unsafe { libpressio_sys::pressio_compressor_version(self.as_raw()) };
         let version = unsafe { CStr::from_ptr(version_ptr) };
-        version.to_str().map_err(PressioError::from)
+        version
+            .to_str()
+            .map_err(|err| PressioError::utf8_error(err, "compressor version"))
     }
 
     fn as_raw(&self) -> *const libpressio_sys::pressio_compressor {
@@ -382,9 +398,9 @@ impl PressioCompressor {
         match message {
             Ok(message) => PressioError {
                 error_code,
-                message: message.to_string(),
+                message: String::from(message),
             },
-            Err(e) => e.into(),
+            Err(err) => PressioError::utf8_error(err, "compressor error message"),
         }
     }
 }
@@ -847,7 +863,9 @@ impl PressioData {
     pub fn get_domain_id(&self) -> Result<&str, PressioError> {
         let domain_id_ptr = unsafe { libpressio_sys::pressio_data_domain_id(self.as_raw()) };
         let domain_id = unsafe { CStr::from_ptr(domain_id_ptr) };
-        domain_id.to_str().map_err(PressioError::from)
+        domain_id
+            .to_str()
+            .map_err(|err| PressioError::utf8_error(err, "data domain id"))
     }
 
     pub fn num_bytes(&self) -> usize {
@@ -994,10 +1012,7 @@ impl PressioOption {
 
         let option = unsafe { libpressio_sys::pressio_option_new() };
         let Some(option) = NonNull::new(option) else {
-            return Err(PressioError {
-                message: String::from("failed to allocate option"),
-                error_code: 1,
-            });
+            return Err(PressioError::alloc_error("option"));
         };
 
         let guard = OptionDrop(option);
@@ -1036,7 +1051,8 @@ impl PressioOption {
                     libpressio_sys::pressio_option_set_double(option.as_ptr(), x)
                 }
                 Self::string(Some(x)) => {
-                    let option_value = CString::new(x)?;
+                    let option_value = CString::new(x)
+                        .map_err(|err| PressioError::null_error(err, "string option"))?;
                     let option_ptr = option_value.as_ptr();
                     libpressio_sys::pressio_option_set_string(option.as_ptr(), option_ptr)
                 }
@@ -1044,7 +1060,8 @@ impl PressioOption {
                     let option_value = x
                         .into_iter()
                         .map(CString::new)
-                        .collect::<Result<Vec<CString>, _>>()?;
+                        .collect::<Result<Vec<CString>, _>>()
+                        .map_err(|err| PressioError::null_error(err, "string array option"))?;
                     let mut option_value_cptr: Vec<*const i8> =
                         option_value.iter().map(|val| val.as_ptr()).collect();
                     libpressio_sys::pressio_option_set_strings(
@@ -1371,10 +1388,7 @@ impl PressioOptions {
         let ptr = unsafe { libpressio_sys::pressio_options_new() };
         match NonNull::new(ptr) {
             Some(ptr) => Ok(Self { ptr }),
-            None => Err(PressioError {
-                message: "failed to allocate options".to_string(),
-                error_code: 1,
-            }),
+            None => Err(PressioError::alloc_error("options")),
         }
     }
 
@@ -1398,7 +1412,8 @@ impl PressioOptions {
 
     pub fn has_option<S: AsRef<str>>(&self, option_name: S) -> Result<bool, PressioError> {
         let option_name = option_name.as_ref();
-        let option_name = CString::new(option_name)?;
+        let option_name = CString::new(option_name)
+            .map_err(|err| PressioError::null_error(err, "option name"))?;
         let option_name_ptr = option_name.as_ptr();
 
         let status =
@@ -1418,7 +1433,8 @@ impl PressioOptions {
 
     pub fn is_option_set<S: AsRef<str>>(&self, option_name: S) -> Result<bool, PressioError> {
         let option_name = option_name.as_ref();
-        let option_name = CString::new(option_name)?;
+        let option_name = CString::new(option_name)
+            .map_err(|err| PressioError::null_error(err, "option name"))?;
         let option_name_ptr = option_name.as_ptr();
 
         let status =
@@ -1441,7 +1457,8 @@ impl PressioOptions {
         option: PressioOption,
     ) -> Result<(), PressioError> {
         let option_name = option_name.as_ref();
-        let option_name = CString::new(option_name)?;
+        let option_name = CString::new(option_name)
+            .map_err(|err| PressioError::null_error(err, "option name"))?;
         let option_name_ptr = option_name.as_ptr();
 
         let option = option.into_raw()?;
@@ -1469,7 +1486,8 @@ impl PressioOptions {
         safety: PressioConversionSafety,
     ) -> Result<(), PressioError> {
         let option_name = option_name.as_ref();
-        let option_name_cstr = CString::new(option_name)?;
+        let option_name_cstr = CString::new(option_name)
+            .map_err(|err| PressioError::null_error(err, "option name"))?;
         let option_name_ptr = option_name_cstr.as_ptr();
 
         let option = option.into_raw()?;
@@ -1504,7 +1522,8 @@ impl PressioOptions {
         option_name: S,
     ) -> Result<Option<PressioOption>, PressioError> {
         let option_name = option_name.as_ref();
-        let option_name = CString::new(option_name)?;
+        let option_name = CString::new(option_name)
+            .map_err(|err| PressioError::null_error(err, "option name"))?;
         let option_name_ptr = option_name.as_ptr();
 
         let status =
@@ -1678,7 +1697,7 @@ mod tests {
         options.set("pressio:lossless", PressioOption::int32(Some(1)))?;
         options.set(
             "pressio:metric",
-            PressioOption::string(Some("size".to_string())),
+            PressioOption::string(Some(String::from("size"))),
         )?;
 
         compressor.set_options(&options)?;
