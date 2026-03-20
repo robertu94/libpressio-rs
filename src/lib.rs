@@ -149,10 +149,12 @@ impl Pressio {
         &mut self,
         id: S,
     ) -> Result<PressioCompressor, PressioError> {
-        let id = CString::new(id.as_ref())
-            .map_err(|err| PressioError::null_error(err, "compressor id"))?;
-        let ptr =
-            unsafe { libpressio_sys::pressio_get_compressor(self.library.as_ptr(), id.as_ptr()) };
+        let id = id.as_ref();
+        let id_cstr =
+            CString::new(id).map_err(|err| PressioError::null_error(err, "compressor id"))?;
+        let ptr = unsafe {
+            libpressio_sys::pressio_get_compressor(self.library.as_ptr(), id_cstr.as_ptr())
+        };
         let Some(ptr) = NonNull::new(ptr) else {
             return Err(self.get_error());
         };
@@ -176,14 +178,16 @@ impl Pressio {
             unsafe { libpressio_sys::pressio_compressor_release(ptr.as_ptr()) };
             return Err(PressioError {
                 error_code: 1,
-                message: String::from("compressor does not expose a `pressio:thread_safe` config"),
+                message: format!(
+                    "compressor `{id}` does not expose a `pressio:thread_safe` config, so we cannot determine if it can be safely sent across threads"
+                ),
             });
         };
         if thread_safe < libpressio_sys::pressio_thread_safety_pressio_thread_safety_multiple {
             unsafe { libpressio_sys::pressio_compressor_release(ptr.as_ptr()) };
             return Err(PressioError {
                 error_code: 1,
-                message: String::from("compressor cannot be sent across threads"),
+                message: format!("compressor `{id}` cannot be sent across threads"),
             });
         }
         Ok(PressioCompressor { ptr })
@@ -1507,8 +1511,8 @@ impl PressioOptions {
 
         if status != libpressio_sys::pressio_options_key_status_pressio_options_key_set {
             return Err(PressioError { error_code: status as i32, message: match status {
-                libpressio_sys::pressio_options_key_status_pressio_options_key_exists => format!("failed to cast option: {option_name:?}"),
-                libpressio_sys::pressio_options_key_status_pressio_options_key_does_not_exist => format!("no such option: {option_name:?}"),
+                libpressio_sys::pressio_options_key_status_pressio_options_key_exists => format!("failed to cast option `{option_name}`"),
+                libpressio_sys::pressio_options_key_status_pressio_options_key_does_not_exist => format!("no such option `{option_name}`"),
                 _ => String::from("<unknown>"),
             } });
         }
