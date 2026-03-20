@@ -980,6 +980,10 @@ pub enum PressioOption {
 }
 
 impl PressioOption {
+    /// Copy the option type without copying the option value.
+    ///
+    /// The returned [`PressioOption`] contains the same variant as `self` but
+    /// has [`None`] instead of the value that `self` may have contained.
     pub fn copy_type_only(&self) -> Self {
         match self {
             Self::bool(_) => Self::bool(None),
