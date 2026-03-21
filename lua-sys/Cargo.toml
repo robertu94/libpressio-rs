@@ -1,0 +1,13 @@
+# FIXME: replace with mlua-sys after https://github.com/mlua-rs/mlua/pull/688
+
+[package]
+name = "lua-sys"
+version = "540.0.0"
+edition = { workspace = true }
+authors = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+links = "lua"
+
+[build-dependencies]
+lua-src = { workspace = true }

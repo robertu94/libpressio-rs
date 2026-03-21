@@ -1,0 +1,28 @@
+[package]
+name = "libpressio-sys"
+version = "0.1.0"
+edition = { workspace = true }
+authors = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+
+description = "Low-level Rust bindings to the libpressio compression framework"
+readme = "README.md"
+categories = ["api-bindings", "compression", "encoding"]
+keywords = ["libpressio", "bindgen", "compression", "encoding"]
+
+[features]
+bzip2 = ["bzip2-sys"]
+lua = ["lua-sys"]
+# For now, enabling the `openmp` feature assumes that OpenMP is pre-installed
+openmp = []
+
+[dependencies]
+bzip2-sys = { workspace = true, features = ["static"], optional = true }
+lua-sys = { workspace = true, optional = true }
+
+[build-dependencies]
+anyhow = { workspace = true }
+bindgen = { workspace = true, features = ["runtime"] }
+cmake = { workspace = true }
+regex = { workspace = true }
