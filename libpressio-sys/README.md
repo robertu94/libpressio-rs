@@ -38,6 +38,6 @@ Licensed under the OPEN SOURCE LICENSE (license number: SF-19-112), see [COPYRIG
 
 ## Funding
 
-The `libpressio-sys` crate has been developed as part of [ESiWACE3](https://www.esiwace.eu), the third phase of the Centre of Excellence in Simulation of Weather and Climate in Europe.
+The `libpressio-sys` crate has been developed in large part by Juniper Tryee as part of [ESiWACE3](https://www.esiwace.eu), the third phase of the Centre of Excellence in Simulation of Weather and Climate in Europe.
 
 Funded by the European Union. This work has received funding from the European High Performance Computing Joint Undertaking (JU) under grant agreement No 101093054.
