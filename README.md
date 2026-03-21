@@ -28,6 +28,10 @@ This crate has the following features:
 - `lua`: enables the Lua-based lambda function compressor and metrics scripts, currently no support for LuaJit is provided
 - `openmp`: enables OpenMP support using pre-installed OpenMP
 
+## License
+
+Licensed under the OPEN SOURCE LICENSE (license number: SF-19-112), see [COPYRIGHT.txt](COPYRIGHT.txt).
+
 ## Funding
 
 Some upgrades to the `libpressio` crate have been developed as part of [ESiWACE3](https://www.esiwace.eu), the third phase of the Centre of Excellence in Simulation of Weather and Climate in Europe.

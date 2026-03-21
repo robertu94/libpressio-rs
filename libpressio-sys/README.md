@@ -30,6 +30,8 @@ This crate has the following features:
 
 ## License
 
+Licensed under the OPEN SOURCE LICENSE (license number: SF-19-112), see [COPYRIGHT.txt](COPYRIGHT.txt).
+
 - libpressio (the `libpressio` folder) is licensed under the OPEN SOURCE LICENSE (license number: SF-19-112), see `libpressio/COPYRIGHT.txt`.
 - sol2 (the `sol2` folder) is licesed under the MIT License, see `sol2/LICENSE.txt`.
 - std_compat (the `std_compat` folder) is licensed under the OPEN SOURCE LICENSE (license number: SF-19-112), see `std_compat/COPYRIGHT.txt`.
