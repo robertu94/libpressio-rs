@@ -14,12 +14,12 @@ keywords = ["libpressio", "bindgen", "compression", "encoding"]
 [features]
 bzip2 = ["bzip2-sys"]
 lua = ["lua-sys"]
-# For now, enabling the `openmp` feature assumes that OpenMP is pre-installed
-openmp = []
+openmp = ["openmp-sys"]
 
 [dependencies]
 bzip2-sys = { workspace = true, features = ["static"], optional = true }
 lua-sys = { workspace = true, optional = true }
+openmp-sys = { workspace = true, optional = true }
 
 [build-dependencies]
 anyhow = { workspace = true }

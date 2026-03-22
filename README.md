@@ -26,7 +26,7 @@ High-level Rust bindigs to the [libpressio] compression framework.
 This crate has the following features:
 - `bzip2`: enables the bzip2 compressor
 - `lua`: enables the Lua-based lambda function compressor and metrics scripts, currently no support for LuaJit is provided
-- `openmp`: enables OpenMP support using pre-installed OpenMP
+- `openmp`: enables OpenMP support
 
 ## License
 

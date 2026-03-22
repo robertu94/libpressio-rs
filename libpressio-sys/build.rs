@@ -4,6 +4,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo::rerun-if-changed=build.rs");
     println!("cargo::rerun-if-changed=wrapper.h");
     println!("cargo::rerun-if-changed=libpressio");
+    println!("cargo::rerun-if-changed=sol2");
     println!("cargo::rerun-if-changed=std_compat");
 
     let out_dir = env::var("OUT_DIR")
@@ -58,14 +59,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     configure_cmake_tools(&mut libpressio_config);
     libpressio_config.define("BUILD_SHARED_LIBS", "OFF");
     libpressio_config.define("BUILD_TESTING", "OFF");
-    libpressio_config.define(
-        "LIBPRESSIO_HAS_OPENMP",
-        if cfg!(feature = "openmp") {
-            "ON"
-        } else {
-            "OFF"
-        },
-    );
+
+    if cfg!(feature = "openmp") {
+        let openmp_flag = env::var("DEP_OPENMP_FLAG").expect("missing OpenMP flag");
+        for f in openmp_flag.split(' ') {
+            libpressio_config.cflag(f);
+            libpressio_config.cxxflag(f);
+        }
+        libpressio_config.define("LIBPRESSIO_HAS_OPENMP", "ON");
+    } else {
+        libpressio_config.define("LIBPRESSIO_HAS_OPENMP", "OFF");
+    }
 
     let mut libpressio_cmake_prefix_path = OsString::from(stdcompat_out);
     if cfg!(feature = "bzip2") {
@@ -117,6 +121,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         libpressio_out.join("lib64").display()
     );
     println!("cargo::rustc-link-lib=static=libpressio");
+
+    if cfg!(feature = "openmp") {
+        if let Some(links) = env::var_os("DEP_OPENMP_CARGO_LINK_INSTRUCTIONS") {
+            for link in env::split_paths(&links) {
+                if !link.as_os_str().is_empty() {
+                    println!("cargo::{}", link.display());
+                }
+            }
+        }
+    }
 
     let cargo_callbacks = CargoCallBacksIngoreGeneratedFiles::new(["pressio_version.h"])?;
     let bindings = bindgen::Builder::default()
