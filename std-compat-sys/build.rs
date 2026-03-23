@@ -7,19 +7,19 @@ fn main() {
     // ---------------------------------------------------------
     // Configure std_compat, the compiler portability layer
     // ---------------------------------------------------------
-    let mut stdcompat_config = cmake::Config::new("std_compat");
-    configure_cmake_tools(&mut stdcompat_config);
+    let mut config = cmake::Config::new("std_compat");
+    configure_cmake_tools(&mut config);
     // prefer static libraries for Rust
-    stdcompat_config.define("BUILD_SHARED_LIBS", "OFF");
+    config.define("BUILD_SHARED_LIBS", "OFF");
     // disable testing to avoid google-test dependency
-    stdcompat_config.define("BUILD_TESTING", "OFF");
+    config.define("BUILD_TESTING", "OFF");
     // require a C++17 compiler (e.g. gcc 12 or later) for now
     // this includes Ubuntu 24.04 and later, Fedora, Nyx, et al
     // https://robertu94.github.io/guides/dependencies
-    stdcompat_config.define("STDCOMPAT_CXX_VERSION", "17");
-    stdcompat_config.define("STDCOMPAT_CXX_UNSTABLE", "ON");
-    stdcompat_config.define("STD_COMPAT_BOOST_REQUIRED", "OFF");
-    let stdcompat_out = stdcompat_config.build();
+    config.define("STDCOMPAT_CXX_VERSION", "17");
+    config.define("STDCOMPAT_CXX_UNSTABLE", "ON");
+    config.define("STD_COMPAT_BOOST_REQUIRED", "OFF");
+    let stdcompat_out = config.build();
 
     println!(
         "cargo::rustc-link-search=native={}",

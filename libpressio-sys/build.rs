@@ -18,56 +18,56 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ---------------------------------------------------------
     // Configure libpressio
     // ---------------------------------------------------------
-    let mut libpressio_config = cmake::Config::new("libpressio");
-    configure_cmake_tools(&mut libpressio_config);
-    libpressio_config.define("BUILD_SHARED_LIBS", "OFF");
-    libpressio_config.define("BUILD_TESTING", "OFF");
+    let mut config = cmake::Config::new("libpressio");
+    configure_cmake_tools(&mut config);
+    config.define("BUILD_SHARED_LIBS", "OFF");
+    config.define("BUILD_TESTING", "OFF");
 
     if cfg!(feature = "openmp") {
         let openmp_flag = env::var("DEP_OPENMP_FLAG").expect("missing OpenMP flag");
         for f in openmp_flag.split(' ') {
-            libpressio_config.cflag(f);
-            libpressio_config.cxxflag(f);
+            config.cflag(f);
+            config.cxxflag(f);
         }
-        libpressio_config.define("LIBPRESSIO_HAS_OPENMP", "ON");
+        config.define("LIBPRESSIO_HAS_OPENMP", "ON");
     } else {
-        libpressio_config.define("LIBPRESSIO_HAS_OPENMP", "OFF");
+        config.define("LIBPRESSIO_HAS_OPENMP", "OFF");
     }
 
-    let mut libpressio_cmake_prefix_path = OsString::from(std_compat_root);
+    let mut cmake_prefix_path = OsString::from(std_compat_root);
     if cfg!(feature = "bzip2") {
         let bzip2_root = env::var("DEP_BZIP2_ROOT")
             .map(PathBuf::from)
             .expect("missing bzip2 dependency");
-        libpressio_cmake_prefix_path.push(";");
-        libpressio_cmake_prefix_path.push(bzip2_root);
-        libpressio_config.define("LIBPRESSIO_HAS_BZIP2", "ON");
+        cmake_prefix_path.push(";");
+        cmake_prefix_path.push(bzip2_root);
+        config.define("LIBPRESSIO_HAS_BZIP2", "ON");
     } else {
-        libpressio_config.define("LIBPRESSIO_HAS_BZIP2", "OFF");
+        config.define("LIBPRESSIO_HAS_BZIP2", "OFF");
     }
     if cfg!(feature = "lua") {
         let sol2_root = env::var("DEP_SOL2_ROOT")
             .map(PathBuf::from)
             .expect("missing sol2 dependency");
-        libpressio_cmake_prefix_path.push(";");
-        libpressio_cmake_prefix_path.push(sol2_root);
+        cmake_prefix_path.push(";");
+        cmake_prefix_path.push(sol2_root);
         let lua_root = env::var("DEP_LUA_ROOT")
             .map(PathBuf::from)
             .expect("missing lua dependency");
-        libpressio_cmake_prefix_path.push(";");
-        libpressio_cmake_prefix_path.push(lua_root);
-        libpressio_config.define("LIBPRESSIO_HAS_LUA", "ON");
+        cmake_prefix_path.push(";");
+        cmake_prefix_path.push(lua_root);
+        config.define("LIBPRESSIO_HAS_LUA", "ON");
     } else {
-        libpressio_config.define("LIBPRESSIO_HAS_LUA", "OFF");
+        config.define("LIBPRESSIO_HAS_LUA", "OFF");
     }
-    libpressio_config.define("CMAKE_PREFIX_PATH", libpressio_cmake_prefix_path);
+    config.define("CMAKE_PREFIX_PATH", cmake_prefix_path);
 
-    libpressio_config.define("LIBPRESSIO_BUILD_MODE", "FULL");
-    libpressio_config.define(
+    config.define("LIBPRESSIO_BUILD_MODE", "FULL");
+    config.define(
         "LIBPRESSIO_WITH_EXTERNAL",
         if target.contains("wasm") { "OFF" } else { "ON" },
     );
-    let libpressio_out = libpressio_config.build();
+    let libpressio_out = config.build();
 
     if target.contains("-linux-") || target.ends_with("-linux") {
         println!("cargo:rustc-link-lib=dylib=stdc++");
