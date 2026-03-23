@@ -1,25 +1,40 @@
 [package]
 name = "libpressio-sys"
-version = "0.1.0"
+version = "0.1.0+libpressio.1.0.7"
 edition = { workspace = true }
 authors = { workspace = true }
 repository = { workspace = true }
 rust-version = { workspace = true }
+
+links = "pressio"
 
 description = "Low-level Rust bindings to the libpressio compression framework"
 readme = "README.md"
 categories = ["api-bindings", "compression", "encoding"]
 keywords = ["libpressio", "bindgen", "compression", "encoding"]
 
+
+exclude = [
+    "/libpressio/.e4s", "/libpressio/.github", "/libpressio/ci",
+    "/libpressio/docker", "/libpressio/docs", "/libpressio/test",
+    "/libpressio/tools/docs", "/libpressio/tools/hdf5_filter",
+    "/libpressio/tools/migrate", "/libpressio/tools/swig",
+    "/libpressio/.clang-format", "/libpressio/.clang-tidy",
+    "/libpressio/.dockerignore", "/libpressio/.travis.yml",
+    "/libpressio/CTestConfig.cmake"
+]
+
 [features]
 bzip2 = ["bzip2-sys"]
-lua = ["lua-sys"]
-# For now, enabling the `openmp` feature assumes that OpenMP is pre-installed
-openmp = []
+lua = ["lua-sys", "sol2-sys"]
+openmp = ["openmp-sys"]
 
 [dependencies]
 bzip2-sys = { workspace = true, features = ["static"], optional = true }
 lua-sys = { workspace = true, optional = true }
+openmp-sys = { workspace = true, optional = true }
+sol2-sys = { workspace = true, optional = true }
+std-compat-sys = { workspace = true }
 
 [build-dependencies]
 anyhow = { workspace = true }

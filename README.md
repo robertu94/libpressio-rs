@@ -1,10 +1,10 @@
 [![CI Status]][workflow] [![MSRV]][repo] [![Latest Version]][crates.io] [![Rust Doc Crate]][docs.rs] [![Rust Doc Main]][docs]
 
 [CI Status]: https://img.shields.io/github/actions/workflow/status/robertu94/libpressio-rs/ci.yml?branch=main
-[workflow]: https://github.com/robertu94/libpressio-r/actions/workflows/ci.yml?query=branch%3Amain
+[workflow]: https://github.com/robertu94/libpressio-rs/actions/workflows/ci.yml?query=branch%3Amain
 
 [MSRV]: https://img.shields.io/badge/MSRV-1.85.0-blue
-[repo]: https://github.com/robertu94/libpressio-r
+[repo]: https://github.com/robertu94/libpressio-rs
 
 [Latest Version]: https://img.shields.io/crates/v/libpressio
 [crates.io]: https://crates.io/crates/libpressio
@@ -26,7 +26,7 @@ High-level Rust bindigs to the [libpressio] compression framework.
 This crate has the following features:
 - `bzip2`: enables the bzip2 compressor
 - `lua`: enables the Lua-based lambda function compressor and metrics scripts, currently no support for LuaJit is provided
-- `openmp`: enables OpenMP support using pre-installed OpenMP
+- `openmp`: enables OpenMP support using system-installed OpenMP
 
 ## License
 

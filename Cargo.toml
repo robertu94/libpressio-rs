@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["libpressio-sys", "lua-sys"]
+members = ["libpressio-sys", "std-compat-sys"]
 
 [workspace.package]
 edition = "2024"
@@ -12,17 +12,19 @@ rust-version = "1.85"  # keep in sync with bindgen MSRV
 # workspace-internal crates
 libpressio = { version = "0.1", path = ".", default-features = false }
 libpressio-sys = { version = "0.1", path = "libpressio-sys", default-features = false }
-lua-sys = { version = "540.0", path = "lua-sys", default-features = false }
+std-compat-sys = { version = "0.1", path = "std-compat-sys", default-features = false }
 
 # crates.io third-party dependencies
 anyhow = { version = "1.0.93", default-features = false }
 bindgen = { version = "0.71", default-features = false }
 bzip2-sys = { version = "0.1.12", default-features = false }
 cmake = { version = "0.1.26", default-features = false }
-libc = { version = "0.2", default-features = false }
-lua-src = { version = "550.0.0", default-features = false }
+libc = { version = "0.2.39", default-features = false }
+lua-sys = { version = "540.0", git = "https://github.com/juntyr/sol2-rs.git", rev = "491e6eb", default-features = false }
 ndarray = { version = "0.16.1", default-features = false }
+openmp-sys = { version = "1.3.0", default-features = false }
 regex = { version = "1.11.1", default-features = false }
+sol2-sys = { version = "0.1", git = "https://github.com/juntyr/sol2-rs.git", rev = "491e6eb", default-features = false }
 thiserror = { version = "2.0.17", default-features = false }
 
 [package]

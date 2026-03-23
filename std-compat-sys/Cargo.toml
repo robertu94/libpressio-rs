@@ -1,0 +1,19 @@
+[package]
+name = "std-compat-sys"
+version = "0.1.0+std-compat.0.0.22"
+edition = { workspace = true }
+authors = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+
+links = "std_compat"
+
+description = "Low-level Rust build for the std_compat C++ compatibility headers"
+readme = "README.md"
+categories = ["api-bindings"]
+keywords = ["std_compat", "bindgen"]
+
+exclude = ["/std_compat/test"]
+
+[build-dependencies]
+cmake = { workspace = true }

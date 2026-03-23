@@ -1636,13 +1636,15 @@ struct PressioOptionsIter<'a> {
     _marker: PhantomData<&'a PressioOptions>,
 }
 
-impl<'a> PressioOptionsIter<'a> {
+unsafe impl Send for PressioOptionsIter<'_> {}
+
+impl PressioOptionsIter<'_> {
     fn as_raw_mut(&mut self) -> *mut libpressio_sys::pressio_options_iter {
         self.ptr.as_ptr()
     }
 }
 
-impl<'a> Iterator for PressioOptionsIter<'a> {
+impl Iterator for PressioOptionsIter<'_> {
     type Item = (Option<String>, Option<PressioOption>);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -1679,15 +1681,13 @@ impl<'a> Iterator for PressioOptionsIter<'a> {
     }
 }
 
-impl<'a> FusedIterator for PressioOptionsIter<'a> {}
+impl FusedIterator for PressioOptionsIter<'_> {}
 
-impl<'a> Drop for PressioOptionsIter<'a> {
+impl Drop for PressioOptionsIter<'_> {
     fn drop(&mut self) {
         unsafe { libpressio_sys::pressio_options_iter_free(self.as_raw_mut()) };
     }
 }
-
-unsafe impl<'a> Send for PressioOptionsIter<'a> {}
 
 #[cfg(test)]
 mod tests {
