@@ -4,7 +4,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo::rerun-if-changed=build.rs");
     println!("cargo::rerun-if-changed=wrapper.h");
     println!("cargo::rerun-if-changed=libpressio");
-    println!("cargo::rerun-if-changed=sol2");
 
     let out_dir = env::var("OUT_DIR")
         .map(PathBuf::from)
@@ -15,24 +14,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let std_compat_root = env::var("DEP_STD_COMPAT_ROOT")
         .map(PathBuf::from)
         .expect("missing std_compat dependency");
-
-    let sol2_out = if cfg!(feature = "lua") {
-        let lua_root = env::var("DEP_LUA_ROOT")
-            .map(PathBuf::from)
-            .expect("missing lua dependency");
-        // ---------------------------------------------------------
-        // Configure sol2
-        // ---------------------------------------------------------
-        let mut sol2_config = cmake::Config::new("sol2");
-        configure_cmake_tools(&mut sol2_config);
-        sol2_config.define("SOL2_ENABLE_INSTALL", "ON");
-        sol2_config.define("SOL2_BUILD_LUA", "OFF");
-        sol2_config.define("SOL2_LUA_VERSION", "5.4");
-        sol2_config.define("CMAKE_PREFIX_PATH", lua_root);
-        Some(sol2_config.build())
-    } else {
-        None
-    };
 
     // ---------------------------------------------------------
     // Configure libpressio
@@ -64,9 +45,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         libpressio_config.define("LIBPRESSIO_HAS_BZIP2", "OFF");
     }
-    if let Some(sol2_out) = sol2_out {
+    if cfg!(feature = "lua") {
+        let sol2_root = env::var("DEP_SOL2_ROOT")
+            .map(PathBuf::from)
+            .expect("missing sol2 dependency");
         libpressio_cmake_prefix_path.push(";");
-        libpressio_cmake_prefix_path.push(sol2_out);
+        libpressio_cmake_prefix_path.push(sol2_root);
         let lua_root = env::var("DEP_LUA_ROOT")
             .map(PathBuf::from)
             .expect("missing lua dependency");

@@ -1,6 +1,6 @@
 [package]
 name = "std-compat-sys"
-version = "0.1.0"
+version = "0.1.0+std-compat.0.0.22"
 edition = { workspace = true }
 authors = { workspace = true }
 repository = { workspace = true }
