@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["libpressio-sys", "lua-sys"]
+members = ["libpressio-sys", "lua-sys", "std-compat-sys"]
 
 [workspace.package]
 edition = "2024"
@@ -13,6 +13,7 @@ rust-version = "1.85"  # keep in sync with bindgen MSRV
 libpressio = { version = "0.1", path = ".", default-features = false }
 libpressio-sys = { version = "0.1", path = "libpressio-sys", default-features = false }
 lua-sys = { version = "540.0", path = "lua-sys", default-features = false }
+std-compat-sys = { version = "0.1", path = "std-compat-sys", default-features = false }
 
 # crates.io third-party dependencies
 anyhow = { version = "1.0.93", default-features = false }

@@ -2,7 +2,7 @@
 	path = libpressio-sys/libpressio
 	url = https://github.com/robertu94/libpressio.git
 [submodule "libpressio-sys/std_compat"]
-	path = libpressio-sys/std_compat
+	path = std-compat-sys/std_compat
 	url = https://github.com/robertu94/std_compat
 [submodule "libpressio-sys/sol2"]
 	path = libpressio-sys/sol2

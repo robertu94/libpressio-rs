@@ -5,7 +5,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo::rerun-if-changed=wrapper.h");
     println!("cargo::rerun-if-changed=libpressio");
     println!("cargo::rerun-if-changed=sol2");
-    println!("cargo::rerun-if-changed=std_compat");
 
     let out_dir = env::var("OUT_DIR")
         .map(PathBuf::from)
@@ -13,26 +12,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let target = env::var("TARGET").expect("missing TARGET");
 
-    // ---------------------------------------------------------
-    // Configure std_compat, the compiler portability layer
-    // ---------------------------------------------------------
-    let mut stdcompat_config = cmake::Config::new("std_compat");
-    configure_cmake_tools(&mut stdcompat_config);
-    // prefer static libraries for Rust
-    stdcompat_config.define("BUILD_SHARED_LIBS", "OFF");
-    // disable testing to avoid google-test dependency
-    stdcompat_config.define("BUILD_TESTING", "OFF");
-    // require a C++17 compiler (e.g. gcc 12 or later) for now
-    // this includes Ubuntu 24.04 and later, Fedora, Nyx, et al
-    // https://robertu94.github.io/guides/dependencies
-    stdcompat_config.define("STDCOMPAT_CXX_VERSION", "17");
-    stdcompat_config.define("STDCOMPAT_CXX_UNSTABLE", "ON");
-    stdcompat_config.define("STD_COMPAT_BOOST_REQUIRED", "OFF");
-    let stdcompat_out = stdcompat_config.build();
-    println!(
-        "cargo::rustc-link-search=native={}",
-        stdcompat_out.display()
-    );
+    let std_compat_root = env::var("DEP_STD_COMPAT_ROOT")
+        .map(PathBuf::from)
+        .expect("missing std_compat dependency");
 
     let sol2_out = if cfg!(feature = "lua") {
         let lua_root = env::var("DEP_LUA_ROOT")
@@ -71,7 +53,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         libpressio_config.define("LIBPRESSIO_HAS_OPENMP", "OFF");
     }
 
-    let mut libpressio_cmake_prefix_path = OsString::from(stdcompat_out);
+    let mut libpressio_cmake_prefix_path = OsString::from(std_compat_root);
     if cfg!(feature = "bzip2") {
         let bzip2_root = env::var("DEP_BZIP2_ROOT")
             .map(PathBuf::from)

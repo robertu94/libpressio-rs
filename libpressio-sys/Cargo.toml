@@ -6,6 +6,8 @@ authors = { workspace = true }
 repository = { workspace = true }
 rust-version = { workspace = true }
 
+links = "pressio"
+
 description = "Low-level Rust bindings to the libpressio compression framework"
 readme = "README.md"
 categories = ["api-bindings", "compression", "encoding"]
@@ -20,6 +22,7 @@ openmp = ["openmp-sys"]
 bzip2-sys = { workspace = true, features = ["static"], optional = true }
 lua-sys = { workspace = true, optional = true }
 openmp-sys = { workspace = true, optional = true }
+std-compat-sys = { workspace = true }
 
 [build-dependencies]
 anyhow = { workspace = true }
