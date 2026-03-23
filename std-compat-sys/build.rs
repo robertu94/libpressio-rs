@@ -36,7 +36,10 @@ fn main() {
     println!("cargo::rustc-link-lib=static=std_compat");
 
     println!("cargo::metadata=root={}", stdcompat_out.display());
-    println!("cargo::metadata=include={}", stdcompat_out.join("include").display());
+    println!(
+        "cargo::metadata=include={}",
+        stdcompat_out.join("include").display()
+    );
 }
 
 fn configure_cmake_tools(config: &mut cmake::Config) {
