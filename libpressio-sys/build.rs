@@ -35,6 +35,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let mut cmake_prefix_path = OsString::from(std_compat_root);
+
     if cfg!(feature = "bzip2") {
         let bzip2_root = env::var("DEP_BZIP2_ROOT")
             .map(PathBuf::from)
@@ -45,6 +46,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         config.define("LIBPRESSIO_HAS_BZIP2", "OFF");
     }
+
     if cfg!(feature = "lua") {
         let sol2_root = env::var("DEP_SOL2_ROOT")
             .map(PathBuf::from)
@@ -60,6 +62,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         config.define("LIBPRESSIO_HAS_LUA", "OFF");
     }
+
+    if cfg!(feature = "distributed") {
+        let distributed_root = env::var("DEP_DISTRIBUTED_ROOT")
+            .map(PathBuf::from)
+            .expect("missing distributed dependency");
+        cmake_prefix_path.push(";");
+        cmake_prefix_path.push(distributed_root);
+        config.define("LIBPRESSIO_HAS_LIBDISTRIBUTED", "ON");
+    } else {
+        config.define("LIBPRESSIO_HAS_LIBDISTRIBUTED", "OFF");
+    }
+
     config.define("CMAKE_PREFIX_PATH", cmake_prefix_path);
 
     config.define("LIBPRESSIO_BUILD_MODE", "FULL");
@@ -87,6 +101,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         libpressio_out.join("lib64").display()
     );
     println!("cargo::rustc-link-lib=static=libpressio");
+
+    println!("cargo::metadata=root={}", libpressio_out.display());
+    println!(
+        "cargo::metadata=include={}",
+        libpressio_out.join("include").display()
+    );
 
     if cfg!(feature = "openmp") {
         if let Some(links) = env::var_os("DEP_OPENMP_CARGO_LINK_INSTRUCTIONS") {

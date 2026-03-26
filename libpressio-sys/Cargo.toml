@@ -26,11 +26,13 @@ exclude = [
 
 [features]
 bzip2 = ["bzip2-sys"]
+distributed = ["libdistributed-sys"]
 lua = ["lua-sys", "sol2-sys"]
 openmp = ["openmp-sys"]
 
 [dependencies]
 bzip2-sys = { workspace = true, features = ["static"], optional = true }
+libdistributed-sys = { workspace = true, optional = true }
 lua-sys = { workspace = true, optional = true }
 openmp-sys = { workspace = true, optional = true }
 sol2-sys = { workspace = true, optional = true }

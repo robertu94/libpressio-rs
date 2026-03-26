@@ -1,0 +1,22 @@
+[package]
+name = "libdistributed-sys"
+version = "0.1.0+libdistributed.0.4.3"
+edition = { workspace = true }
+authors = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+
+links = "distributed"
+
+description = "Low-level Rust build for the libdistributed C++ MPI facilities"
+readme = "README.md"
+categories = ["api-bindings"]
+keywords = ["libdistributed", "bindgen"]
+
+# exclude = ["/std_compat/test"]
+
+[dependencies]
+std-compat-sys = { workspace = true }
+
+[build-dependencies]
+cmake = { workspace = true }

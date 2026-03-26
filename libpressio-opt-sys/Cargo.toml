@@ -1,0 +1,24 @@
+[package]
+name = "libpressio-opt-sys"
+version = "0.1.0+libpressio-opt.0.15.4"
+edition = { workspace = true }
+authors = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+
+links = "pressio-opt"
+
+description = "Low-level Rust build for the libpressio-opt autotuning plugin for libpressio"
+readme = "README.md"
+categories = ["api-bindings"]
+keywords = ["libpressio-opt", "bindgen"]
+
+# exclude = ["/std_compat/test"]
+
+[dependencies]
+libdistributed-sys = { workspace = true }
+libpressio-sys = { workspace = true, features = ["distributed"] }
+std-compat-sys = { workspace = true }
+
+[build-dependencies]
+cmake = { workspace = true }
