@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["PressioArray","PressioConversionSafety","PressioDtype","PressioOption","PressioThreadSafety"],"fn":["features","major_version","minor_version","patch_version","supported_compressors","supported_io_modules","supported_metrics"],"struct":["Pressio","PressioCompressor","PressioData","PressioError","PressioOptions"],"trait":["PressioElement"]};
