@@ -7,6 +7,7 @@ use std::{
     ffi::{CStr, CString, c_char, c_int, c_uchar, c_void},
     iter::FusedIterator,
     marker::PhantomData,
+    ops::{Deref, DerefMut},
     ptr::NonNull,
     rc::Rc,
 };
@@ -436,77 +437,19 @@ impl PressioSendableCompressor {
     pub fn into_non_sendable(self) -> PressioNonSendableCompressor {
         self.inner
     }
+}
 
-    pub fn compress(
-        &mut self,
-        input_data: &PressioData,
-        compressed_data: PressioData,
-    ) -> Result<PressioData, PressioError> {
-        self.inner.compress(input_data, compressed_data)
+impl Deref for PressioSendableCompressor {
+    type Target = PressioNonSendableCompressor;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
     }
+}
 
-    pub fn decompress(
-        &mut self,
-        compressed_data: &PressioData,
-        decompressed_data: PressioData,
-    ) -> Result<PressioData, PressioError> {
-        self.inner.decompress(compressed_data, decompressed_data)
-    }
-
-    pub fn set_options(&mut self, options: &PressioOptions) -> Result<(), PressioError> {
-        self.inner.set_options(options)
-    }
-
-    pub fn get_configuration(&self) -> Result<PressioOptions, PressioError> {
-        self.inner.get_configuration()
-    }
-
-    pub fn get_documentation(&self) -> Result<PressioOptions, PressioError> {
-        self.inner.get_documentation()
-    }
-
-    pub fn get_options(&self) -> Result<PressioOptions, PressioError> {
-        self.inner.get_options()
-    }
-
-    pub fn get_metrics_options(&self) -> Result<PressioOptions, PressioError> {
-        self.inner.get_metrics_options()
-    }
-
-    pub fn set_metrics_options(&mut self, options: &PressioOptions) -> Result<(), PressioError> {
-        self.inner.set_metrics_options(options)
-    }
-
-    pub fn get_metric_results(&self) -> Result<PressioOptions, PressioError> {
-        self.inner.get_metric_results()
-    }
-
-    pub fn get_name(&self) -> Result<&str, PressioError> {
-        self.inner.get_name()
-    }
-
-    pub fn set_name(&mut self, name: impl AsRef<str>) -> Result<(), PressioError> {
-        self.inner.set_name(name)
-    }
-
-    pub fn get_prefix(&self) -> Result<&str, PressioError> {
-        self.inner.get_prefix()
-    }
-
-    pub fn major_version(&self) -> c_int {
-        self.inner.major_version()
-    }
-
-    pub fn minor_version(&self) -> c_int {
-        self.inner.minor_version()
-    }
-
-    pub fn patch_version(&self) -> c_int {
-        self.inner.patch_version()
-    }
-
-    pub fn get_version(&self) -> Result<&str, PressioError> {
-        self.inner.get_version()
+impl DerefMut for PressioSendableCompressor {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
     }
 }
 
@@ -1793,11 +1736,11 @@ mod tests {
     fn safe_works(
         ndarray_to_data: impl Fn(
             ndarray::ArrayD<f32>,
-            &mut PressioSendableCompressor,
+            &mut PressioNonSendableCompressor,
             Box<
                 dyn FnOnce(
                     &PressioData,
-                    &mut PressioSendableCompressor,
+                    &mut PressioNonSendableCompressor,
                 ) -> Result<(PressioData, PressioData), PressioError>,
             >,
         ) -> Result<(PressioData, PressioData), PressioError>,
