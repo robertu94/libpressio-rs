@@ -6,7 +6,7 @@ authors = { workspace = true }
 repository = { workspace = true }
 rust-version = { workspace = true }
 
-links = "distributed"
+links = "libdistributed"
 
 description = "Low-level Rust build for the libdistributed C++ MPI facilities"
 readme = "README.md"
@@ -15,7 +15,11 @@ keywords = ["libdistributed", "bindgen"]
 
 # exclude = ["/std_compat/test"]
 
+[features]
+mpi-stubs = ["mpi-stubs-sys"]
+
 [dependencies]
+mpi-stubs-sys = { workspace = true, optional = true }
 std-compat-sys = { workspace = true }
 
 [build-dependencies]

@@ -1,4 +1,8 @@
-use std::{env, ffi::OsString, path::PathBuf};
+use std::{
+    env,
+    ffi::OsString,
+    path::{Path, PathBuf},
+};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo::rerun-if-changed=build.rs");
@@ -64,16 +68,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if cfg!(feature = "distributed") {
-        let distributed_root = env::var("DEP_DISTRIBUTED_ROOT")
+        let libdistributed_root = env::var("DEP_LIBDISTRIBUTED_ROOT")
             .map(PathBuf::from)
-            .expect("missing distributed dependency");
+            .expect("missing libdistributed dependency");
         cmake_prefix_path.push(";");
-        cmake_prefix_path.push(distributed_root);
+        cmake_prefix_path.push(libdistributed_root);
         config.define("LIBPRESSIO_HAS_LIBDISTRIBUTED", "ON");
     } else {
         config.define("LIBPRESSIO_HAS_LIBDISTRIBUTED", "OFF");
     }
 
+    if cfg!(feature = "mpi-stubs") {
+        let mpi_stubs_root = env::var("DEP_MPI_STUBS_ROOT")
+            .map(PathBuf::from)
+            .expect("missing mpi-stubs dependency");
+        config.define("MPI_CXX_HEADER_DIR", mpi_stubs_root.join("include"));
+        config.define("MPI_CXX_LIB_NAMES", "mpi");
+        config.define(
+            "MPI_mpi_LIBRARY",
+            mpi_stubs_root.join("lib").join("libmpi.a"),
+        );
+    }
+
+    println!(
+        "cargo::metadata=prefix={}",
+        Path::new(&cmake_prefix_path).display()
+    );
     config.define("CMAKE_PREFIX_PATH", cmake_prefix_path);
 
     config.define("LIBPRESSIO_BUILD_MODE", "FULL");

@@ -1,0 +1,19 @@
+[package]
+name = "mpi-stubs-sys"
+version = "0.1.0"
+edition = { workspace = true }
+authors = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+
+links = "mpi-stubs"
+
+description = "Low-level Rust build for the mpi-stubs serial MPI implementation"
+readme = "README.md"
+categories = ["api-bindings"]
+keywords = ["mpi-stubs", "bindgen"]
+
+# exclude = ["/std_compat/test"]
+
+[build-dependencies]
+cmake = { workspace = true }

@@ -1,4 +1,4 @@
-use std::{env, path::PathBuf};
+use std::{env, ffi::OsString, path::PathBuf};
 
 fn main() {
     println!("cargo::rerun-if-changed=build.rs");
@@ -7,6 +7,8 @@ fn main() {
     let std_compat_root = env::var("DEP_STD_COMPAT_ROOT")
         .map(PathBuf::from)
         .expect("missing std_compat dependency");
+
+    let cmake_prefix_path = OsString::from(std_compat_root);
 
     // ---------------------------------------------------------
     // Configure libdistributed, the MPI facilities
@@ -17,7 +19,20 @@ fn main() {
     config.define("BUILD_SHARED_LIBS", "OFF");
     // disable testing
     config.define("BUILD_TESTING", "OFF");
-    config.define("CMAKE_PREFIX_PATH", std_compat_root);
+
+    if cfg!(feature = "mpi-stubs") {
+        let mpi_stubs_root = env::var("DEP_MPI_STUBS_ROOT")
+            .map(PathBuf::from)
+            .expect("missing mpi-stubs dependency");
+        config.define("MPI_CXX_HEADER_DIR", mpi_stubs_root.join("include"));
+        config.define("MPI_CXX_LIB_NAMES", "mpi");
+        config.define(
+            "MPI_mpi_LIBRARY",
+            mpi_stubs_root.join("lib").join("libmpi.a"),
+        );
+    }
+
+    config.define("CMAKE_PREFIX_PATH", cmake_prefix_path);
     let libdistributed_out = config.build();
 
     println!(
@@ -32,7 +47,7 @@ fn main() {
         "cargo::rustc-link-search=native={}",
         libdistributed_out.join("lib64").display()
     );
-    println!("cargo::rustc-link-lib=static=std_compat");
+    println!("cargo::rustc-link-lib=static=libdistributed");
 
     println!("cargo::metadata=root={}", libdistributed_out.display());
     println!(

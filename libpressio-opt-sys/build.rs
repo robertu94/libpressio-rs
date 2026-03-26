@@ -2,7 +2,7 @@ use std::{env, ffi::OsString, path::PathBuf};
 
 fn main() {
     println!("cargo::rerun-if-changed=build.rs");
-    println!("cargo::rerun-if-changed=libdistributed");
+    println!("cargo::rerun-if-changed=libpressio_opt");
 
     let mut cmake_prefix_path = OsString::new();
 
@@ -12,17 +12,22 @@ fn main() {
     cmake_prefix_path.push(";");
     cmake_prefix_path.push(std_compat_root);
 
-    let distributed_root = env::var("DEP_DISTRIBUTED_ROOT")
+    let libdistributed_root = env::var("DEP_LIBDISTRIBUTED_ROOT")
         .map(PathBuf::from)
-        .expect("missing distributed dependency");
+        .expect("missing libdistributed dependency");
     cmake_prefix_path.push(";");
-    cmake_prefix_path.push(distributed_root);
+    cmake_prefix_path.push(libdistributed_root);
 
-    let pressio_root = env::var("DEP_PRESSIO_ROOT")
+    let libpressio_root = env::var("DEP_LIBPRESSIO_ROOT")
         .map(PathBuf::from)
-        .expect("missing pressio dependency");
+        .expect("missing libpressio dependency");
     cmake_prefix_path.push(";");
-    cmake_prefix_path.push(pressio_root);
+    cmake_prefix_path.push(libpressio_root);
+    let libpressio_prefix = env::var("DEP_LIBPRESSIO_PREFIX")
+        .map(PathBuf::from)
+        .expect("missing libpressio dependency");
+    cmake_prefix_path.push(";");
+    cmake_prefix_path.push(libpressio_prefix);
 
     // ---------------------------------------------------------
     // Configure libpressio_opt, the autotuning plugin for libpressio
@@ -35,27 +40,40 @@ fn main() {
     config.define("BUILD_TESTING", "OFF");
     // disable fraz support
     config.define("LIBPRESSIO_OPT_HAS_DLIB", "OFF");
+
+    if cfg!(feature = "mpi-stubs") {
+        let mpi_stubs_root = env::var("DEP_MPI_STUBS_ROOT")
+            .map(PathBuf::from)
+            .expect("missing mpi-stubs dependency");
+        config.define("MPI_CXX_HEADER_DIR", mpi_stubs_root.join("include"));
+        config.define("MPI_CXX_LIB_NAMES", "mpi");
+        config.define(
+            "MPI_mpi_LIBRARY",
+            mpi_stubs_root.join("lib").join("libmpi.a"),
+        );
+    }
+
     config.define("CMAKE_PREFIX_PATH", cmake_prefix_path);
-    let libdistributed_out = config.build();
+    let libpressio_opt_out = config.build();
 
     println!(
         "cargo::rustc-link-search=native={}",
-        libdistributed_out.display()
+        libpressio_opt_out.display()
     );
     println!(
         "cargo::rustc-link-search=native={}",
-        libdistributed_out.join("lib").display()
+        libpressio_opt_out.join("lib").display()
     );
     println!(
         "cargo::rustc-link-search=native={}",
-        libdistributed_out.join("lib64").display()
+        libpressio_opt_out.join("lib64").display()
     );
-    println!("cargo::rustc-link-lib=static=std_compat");
+    println!("cargo::rustc-link-lib=static=libpressio_opt");
 
-    println!("cargo::metadata=root={}", libdistributed_out.display());
+    println!("cargo::metadata=root={}", libpressio_opt_out.display());
     println!(
         "cargo::metadata=include={}",
-        libdistributed_out.join("include").display()
+        libpressio_opt_out.join("include").display()
     );
 }
 

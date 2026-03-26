@@ -6,7 +6,7 @@ authors = { workspace = true }
 repository = { workspace = true }
 rust-version = { workspace = true }
 
-links = "pressio"
+links = "libpressio"
 
 description = "Low-level Rust bindings to the libpressio compression framework"
 readme = "README.md"
@@ -28,12 +28,14 @@ exclude = [
 bzip2 = ["bzip2-sys"]
 distributed = ["libdistributed-sys"]
 lua = ["lua-sys", "sol2-sys"]
+mpi-stubs = ["mpi-stubs-sys", "libdistributed-sys?/mpi-stubs"]
 openmp = ["openmp-sys"]
 
 [dependencies]
 bzip2-sys = { workspace = true, features = ["static"], optional = true }
 libdistributed-sys = { workspace = true, optional = true }
 lua-sys = { workspace = true, optional = true }
+mpi-stubs-sys = { workspace = true, optional = true }
 openmp-sys = { workspace = true, optional = true }
 sol2-sys = { workspace = true, optional = true }
 std-compat-sys = { workspace = true }
