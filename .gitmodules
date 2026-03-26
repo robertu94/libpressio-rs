@@ -4,3 +4,12 @@
 [submodule "libpressio-sys/std_compat"]
 	path = std-compat-sys/std_compat
 	url = https://github.com/robertu94/std_compat
+[submodule "libdistributed-sys/libdistributed"]
+	path = libdistributed-sys/libdistributed
+	url = https://github.com/robertu94/libdistributed.git
+[submodule "libpressio-opt-sys/libpressio_opt"]
+	path = libpressio-opt-sys/libpressio_opt
+	url = https://github.com/robertu94/libpressio_opt.git
+[submodule "mpi-stubs-sys/mpi-stubs"]
+	path = mpi-stubs-sys/mpi-stubs
+	url = https://github.com/scientificcomputing/mpi-stubs.git

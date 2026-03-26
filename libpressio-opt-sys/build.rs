@@ -1,82 +1,50 @@
-use std::{
-    env,
-    ffi::OsString,
-    path::{Path, PathBuf},
-};
+use std::{env, ffi::OsString, path::PathBuf};
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() {
     println!("cargo::rerun-if-changed=build.rs");
     println!("cargo::rerun-if-changed=wrapper.h");
-    println!("cargo::rerun-if-changed=libpressio");
+    println!("cargo::rerun-if-changed=libpressio_opt");
 
     let out_dir = env::var("OUT_DIR")
         .map(PathBuf::from)
         .expect("missing OUT_DIR");
 
-    let target = env::var("TARGET").expect("missing TARGET");
+    let mut cmake_prefix_path = OsString::new();
 
     let std_compat_root = env::var("DEP_STD_COMPAT_ROOT")
         .map(PathBuf::from)
         .expect("missing std_compat dependency");
+    cmake_prefix_path.push(";");
+    cmake_prefix_path.push(std_compat_root);
+
+    let libdistributed_root = env::var("DEP_LIBDISTRIBUTED_ROOT")
+        .map(PathBuf::from)
+        .expect("missing libdistributed dependency");
+    cmake_prefix_path.push(";");
+    cmake_prefix_path.push(libdistributed_root);
+
+    let libpressio_root = env::var("DEP_LIBPRESSIO_ROOT")
+        .map(PathBuf::from)
+        .expect("missing libpressio dependency");
+    cmake_prefix_path.push(";");
+    cmake_prefix_path.push(libpressio_root);
+    let libpressio_prefix = env::var("DEP_LIBPRESSIO_PREFIX")
+        .map(PathBuf::from)
+        .expect("missing libpressio dependency");
+    cmake_prefix_path.push(";");
+    cmake_prefix_path.push(libpressio_prefix);
 
     // ---------------------------------------------------------
-    // Configure libpressio
+    // Configure libpressio_opt, the autotuning plugin for libpressio
     // ---------------------------------------------------------
-    let mut config = cmake::Config::new("libpressio");
+    let mut config = cmake::Config::new("libpressio_opt");
     configure_cmake_tools(&mut config);
+    // prefer static libraries for Rust
     config.define("BUILD_SHARED_LIBS", "OFF");
+    // disable testing
     config.define("BUILD_TESTING", "OFF");
-
-    if cfg!(feature = "openmp") {
-        let openmp_flag = env::var("DEP_OPENMP_FLAG").expect("missing OpenMP flag");
-        for f in openmp_flag.split(' ') {
-            config.cflag(f);
-            config.cxxflag(f);
-        }
-        config.define("LIBPRESSIO_HAS_OPENMP", "ON");
-    } else {
-        config.define("LIBPRESSIO_HAS_OPENMP", "OFF");
-    }
-
-    let mut cmake_prefix_path = OsString::from(std_compat_root);
-
-    if cfg!(feature = "bzip2") {
-        let bzip2_root = env::var("DEP_BZIP2_ROOT")
-            .map(PathBuf::from)
-            .expect("missing bzip2 dependency");
-        cmake_prefix_path.push(";");
-        cmake_prefix_path.push(bzip2_root);
-        config.define("LIBPRESSIO_HAS_BZIP2", "ON");
-    } else {
-        config.define("LIBPRESSIO_HAS_BZIP2", "OFF");
-    }
-
-    if cfg!(feature = "lua") {
-        let sol2_root = env::var("DEP_SOL2_ROOT")
-            .map(PathBuf::from)
-            .expect("missing sol2 dependency");
-        cmake_prefix_path.push(";");
-        cmake_prefix_path.push(sol2_root);
-        let lua_root = env::var("DEP_LUA_ROOT")
-            .map(PathBuf::from)
-            .expect("missing lua dependency");
-        cmake_prefix_path.push(";");
-        cmake_prefix_path.push(lua_root);
-        config.define("LIBPRESSIO_HAS_LUA", "ON");
-    } else {
-        config.define("LIBPRESSIO_HAS_LUA", "OFF");
-    }
-
-    if cfg!(feature = "distributed") {
-        let libdistributed_root = env::var("DEP_LIBDISTRIBUTED_ROOT")
-            .map(PathBuf::from)
-            .expect("missing libdistributed dependency");
-        cmake_prefix_path.push(";");
-        cmake_prefix_path.push(libdistributed_root);
-        config.define("LIBPRESSIO_HAS_LIBDISTRIBUTED", "ON");
-    } else {
-        config.define("LIBPRESSIO_HAS_LIBDISTRIBUTED", "OFF");
-    }
+    // disable fraz support
+    config.define("LIBPRESSIO_OPT_HAS_DLIB", "OFF");
 
     if cfg!(feature = "mpi-stubs") {
         let mpi_stubs_root = env::var("DEP_MPI_STUBS_ROOT")
@@ -90,68 +58,44 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
-    println!(
-        "cargo::metadata=prefix={}",
-        Path::new(&cmake_prefix_path).display()
-    );
     config.define("CMAKE_PREFIX_PATH", cmake_prefix_path);
+    let libpressio_opt_out = config.build();
 
-    config.define("LIBPRESSIO_BUILD_MODE", "FULL");
-    config.define(
-        "LIBPRESSIO_WITH_EXTERNAL",
-        if target.contains("wasm") { "OFF" } else { "ON" },
-    );
-    let libpressio_out = config.build();
-
-    if target.contains("-linux-") || target.ends_with("-linux") {
-        println!("cargo:rustc-link-lib=dylib=stdc++");
-    } else if target.ends_with("-darwin") {
-        println!("cargo:rustc-link-lib=dylib=c++");
-    }
     println!(
         "cargo::rustc-link-search=native={}",
-        libpressio_out.display()
+        libpressio_opt_out.display()
     );
     println!(
         "cargo::rustc-link-search=native={}",
-        libpressio_out.join("lib").display()
+        libpressio_opt_out.join("lib").display()
     );
     println!(
         "cargo::rustc-link-search=native={}",
-        libpressio_out.join("lib64").display()
+        libpressio_opt_out.join("lib64").display()
     );
-    println!("cargo::rustc-link-lib=static=libpressio");
+    println!("cargo::rustc-link-lib=static=libpressio_opt");
 
-    println!("cargo::metadata=root={}", libpressio_out.display());
+    println!("cargo::metadata=root={}", libpressio_opt_out.display());
     println!(
         "cargo::metadata=include={}",
-        libpressio_out.join("include").display()
+        libpressio_opt_out.join("include").display()
     );
 
-    if cfg!(feature = "openmp") {
-        if let Some(links) = env::var_os("DEP_OPENMP_CARGO_LINK_INSTRUCTIONS") {
-            for link in env::split_paths(&links) {
-                if !link.as_os_str().is_empty() {
-                    println!("cargo::{}", link.display());
-                }
-            }
-        }
-    }
-
-    let cargo_callbacks = CargoCallBacksIngoreGeneratedFiles::new(["pressio_version.h"])?;
+    let cargo_callbacks = CargoCallBacksIngoreGeneratedFiles::new(["pressio_version.h"]);
     let bindings = bindgen::Builder::default()
         .clang_arg("-x")
         .clang_arg("c++")
         .clang_arg("-std=c++17")
         .clang_arg(format!(
             "-I{}",
-            libpressio_out.join("include").join("libpressio").display()
+            libpressio_opt_out
+                .join("include")
+                .join("libpressio_opt")
+                .display()
         ))
         .header("wrapper.h")
         .parse_callbacks(Box::new(cargo_callbacks))
-        .allowlist_function("pressio_.*")
-        .allowlist_var("pressio_.*")
-        .allowlist_type("pressio_.*")
+        .allowlist_function("libpressio_register_libpressio_opt")
         .derive_copy(false)
         .derive_debug(false)
         .derive_default(false)
@@ -173,7 +117,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     bindings
         .write_to_file(out_dir.join("bindings.rs"))
         .expect("Couldn't write bindings!");
-    Ok(())
 }
 
 #[derive(Debug)]
@@ -183,14 +126,14 @@ struct CargoCallBacksIngoreGeneratedFiles {
 }
 
 impl CargoCallBacksIngoreGeneratedFiles {
-    fn new<'a, T>(files: T) -> Result<CargoCallBacksIngoreGeneratedFiles, anyhow::Error>
+    fn new<'a, T>(files: T) -> Self
     where
         T: IntoIterator<Item = &'a str>,
     {
-        Ok(CargoCallBacksIngoreGeneratedFiles {
+        Self {
             cargo_callbacks: bindgen::CargoCallbacks::new(),
             files: Vec::from_iter(files.into_iter().map(|v| regex::Regex::new(v).unwrap())),
-        })
+        }
     }
 }
 

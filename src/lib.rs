@@ -7,7 +7,10 @@ use std::{
     ffi::{CStr, CString, c_char, c_int, c_uchar, c_void},
     iter::FusedIterator,
     marker::PhantomData,
+    ops::{Deref, DerefMut},
     ptr::NonNull,
+    rc::Rc,
+    sync::LazyLock,
 };
 
 use libpressio_sys::{
@@ -17,6 +20,15 @@ use libpressio_sys::{
 };
 use ndarray::{Array, ArrayBase, ArrayView, CowArray, Data, Dimension, IxDyn};
 use thiserror::Error;
+
+static REGISTRATION: LazyLock<()> = LazyLock::new(|| unsafe {
+    libpressio_sys::pressio_register_all();
+
+    #[cfg(feature = "opt")]
+    {
+        libpressio_opt_sys::libpressio_register_libpressio_opt();
+    }
+});
 
 #[derive(Debug, Clone, Error)]
 #[error("{message}")]
@@ -61,6 +73,8 @@ pub fn patch_version() -> u32 {
 }
 
 pub fn supported_compressors() -> Result<Vec<&'static str>, PressioError> {
+    LazyLock::force(&REGISTRATION);
+
     // Safety:
     // - pressio_supported_compressors is safe to call
     // - the returned pointer has 'static lifetime
@@ -77,6 +91,8 @@ pub fn supported_compressors() -> Result<Vec<&'static str>, PressioError> {
 }
 
 pub fn supported_io_modules() -> Result<Vec<&'static str>, PressioError> {
+    LazyLock::force(&REGISTRATION);
+
     // Safety:
     // - pressio_supported_io_modules is safe to call
     // - the returned pointer has 'static lifetime
@@ -92,6 +108,8 @@ pub fn supported_io_modules() -> Result<Vec<&'static str>, PressioError> {
 }
 
 pub fn supported_metrics() -> Result<Vec<&'static str>, PressioError> {
+    LazyLock::force(&REGISTRATION);
+
     // Safety:
     // - pressio_supported_metrics is safe to call
     // - the returned pointer has 'static lifetime
@@ -132,6 +150,8 @@ unsafe impl Send for Pressio {}
 
 impl Pressio {
     pub fn new() -> Result<Pressio, PressioError> {
+        LazyLock::force(&REGISTRATION);
+
         let library: *mut libpressio_sys::pressio;
         unsafe {
             library = libpressio_sys::pressio_instance();
@@ -158,39 +178,10 @@ impl Pressio {
         let Some(ptr) = NonNull::new(ptr) else {
             return Err(self.get_error());
         };
-        let config = unsafe {
-            libpressio_sys::pressio_compressor_get_configuration(ptr.as_ptr().cast_const())
-        };
-        let Some(config) = NonNull::new(config) else {
-            unsafe { libpressio_sys::pressio_compressor_release(ptr.as_ptr()) };
-            return Err(unsafe { PressioCompressor::get_error_from_raw(ptr) });
-        };
-        let mut thread_safe = libpressio_sys::pressio_thread_safety_pressio_thread_safety_single;
-        let status = unsafe {
-            libpressio_sys::pressio_options_get_threadsafety(
-                config.as_ptr(),
-                c"pressio:thread_safe".as_ptr(),
-                &raw mut thread_safe,
-            )
-        };
-        unsafe { libpressio_sys::pressio_options_free(config.as_ptr()) };
-        if status != libpressio_sys::pressio_options_key_status_pressio_options_key_set {
-            unsafe { libpressio_sys::pressio_compressor_release(ptr.as_ptr()) };
-            return Err(PressioError {
-                error_code: 1,
-                message: format!(
-                    "compressor `{id}` does not expose a `pressio:thread_safe` config, so we cannot determine if it can be safely sent across threads"
-                ),
-            });
-        };
-        if thread_safe < libpressio_sys::pressio_thread_safety_pressio_thread_safety_multiple {
-            unsafe { libpressio_sys::pressio_compressor_release(ptr.as_ptr()) };
-            return Err(PressioError {
-                error_code: 1,
-                message: format!("compressor `{id}` cannot be sent across threads"),
-            });
-        }
-        Ok(PressioCompressor { ptr })
+        Ok(PressioCompressor {
+            ptr,
+            _marker: PhantomData,
+        })
     }
 
     fn get_error(&mut self) -> PressioError {
@@ -218,17 +209,47 @@ impl Drop for Pressio {
 }
 
 pub struct PressioCompressor {
-    // pressio_compressor (generally) is Send but !Sync
-    // - impl Send below
-    // - impl !Sync from NonNull
-    // - check at runtime that no compressor can be instantiated that would
-    //   violate these properties
+    // pressio_compressor is conservatively !Send and !Sync
+    // - impl !Send from PhantomData<Rc>
+    // - impl !Sync from PhantomData<Rc>
     ptr: NonNull<libpressio_sys::pressio_compressor>,
+    _marker: PhantomData<Rc<()>>,
 }
 
-unsafe impl Send for PressioCompressor {}
-
 impl PressioCompressor {
+    pub fn try_into_sendable(self) -> Result<PressioSendableCompressor, (Self, PressioError)> {
+        fn check_is_sendable(compressor: &PressioCompressor) -> Result<(), PressioError> {
+            let id = compressor.get_prefix()?;
+            let config = compressor.get_configuration()?;
+
+            let thread_safe = config.get("pressio:thread_safe")?;
+
+            let Some(PressioOption::thread_safety(Some(thread_safe))) = thread_safe else {
+                return Err(PressioError {
+                    error_code: 1,
+                    message: format!(
+                        "compressor `{id}` does not expose a `pressio:thread_safe` config, so we cannot determine if it can be safely sent across threads"
+                    ),
+                });
+            };
+
+            match thread_safe {
+                PressioThreadSafety::Multiple => Ok(()),
+                PressioThreadSafety::Serialized | PressioThreadSafety::Single => {
+                    Err(PressioError {
+                        error_code: 1,
+                        message: format!("compressor `{id}` cannot be sent across threads"),
+                    })
+                }
+            }
+        }
+
+        match check_is_sendable(&self) {
+            Ok(()) => Ok(PressioSendableCompressor { inner: self }),
+            Err(err) => Err((self, err)),
+        }
+    }
+
     pub fn compress(
         &mut self,
         input_data: &PressioData,
@@ -414,6 +435,37 @@ impl Drop for PressioCompressor {
         unsafe {
             libpressio_sys::pressio_compressor_release(self.as_raw_mut());
         }
+    }
+}
+
+pub struct PressioSendableCompressor {
+    // pressio_compressor is !Sync, and sometimes Send
+    // - impl Send from below
+    // - impl !Sync from PressioCompressor
+    // - check at construction that no compressor can be instantiated that
+    //   would violate these properties
+    inner: PressioCompressor,
+}
+
+unsafe impl Send for PressioSendableCompressor {}
+
+impl PressioSendableCompressor {
+    pub fn into_non_sendable(self) -> PressioCompressor {
+        self.inner
+    }
+}
+
+impl Deref for PressioSendableCompressor {
+    type Target = PressioCompressor;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl DerefMut for PressioSendableCompressor {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
     }
 }
 
@@ -1711,7 +1763,10 @@ mod tests {
     ) -> Result<(), PressioError> {
         let mut lib = Pressio::new()?;
         eprintln!("supported compressors: {:?}", supported_compressors());
-        let mut compressor = lib.get_compressor("pressio")?;
+        let mut compressor = lib
+            .get_compressor("pressio")?
+            .try_into_sendable()
+            .map_err(|(_, err)| err)?;
 
         let mut options = PressioOptions::new()?;
         options.set("pressio:lossless", PressioOption::int32(Some(1)))?;

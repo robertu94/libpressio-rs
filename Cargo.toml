@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["libpressio-sys", "std-compat-sys"]
+members = ["libdistributed-sys", "libpressio-opt-sys","libpressio-sys", "mpi-stubs-sys", "std-compat-sys"]
 
 [workspace.package]
 edition = "2024"
@@ -11,7 +11,10 @@ rust-version = "1.85"  # keep in sync with bindgen MSRV
 [workspace.dependencies]
 # workspace-internal crates
 libpressio = { version = "0.1", path = ".", default-features = false }
+libdistributed-sys = { version = "0.1", path = "libdistributed-sys", default-features = false }
 libpressio-sys = { version = "0.1", path = "libpressio-sys", default-features = false }
+libpressio-opt-sys = { version = "0.1", path = "libpressio-opt-sys", default-features = false }
+mpi-stubs-sys = { version = "0.1", path = "mpi-stubs-sys", default-features = false }
 std-compat-sys = { version = "0.1", path = "std-compat-sys", default-features = false }
 
 # crates.io third-party dependencies
@@ -41,11 +44,15 @@ keywords = ["libpressio", "compression", "encoding"]
 
 [features]
 bzip2 = ["libpressio-sys/bzip2"]
+distributed = ["libpressio-sys/distributed"]
 lua = ["libpressio-sys/lua"]
+mpi-stubs = ["libpressio-sys/mpi-stubs", "libpressio-opt-sys?/mpi-stubs"]
 openmp = ["libpressio-sys/openmp"]
+opt = ["libpressio-opt-sys"]
 
 [dependencies]
 ndarray = { workspace = true }
 libc = { workspace = true }
+libpressio-opt-sys = { workspace = true, optional = true }
 libpressio-sys = { workspace = true }
 thiserror = { workspace = true }
