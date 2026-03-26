@@ -1,7 +1,7 @@
-[![CI Status]][workflow] [![MSRV]][repo] [![Latest Version]][crates.io] [![Rust Doc Crate]][docs.rs] [![Rust Doc Main]][docs]
+[![CI Status]][workflow] [![MSRV]][repo] [![Latest Version]][crates.io] [![Rust Doc Crate]][docs.rs] [![Rust Doc Master]][docs]
 
-[CI Status]: https://img.shields.io/github/actions/workflow/status/robertu94/libpressio-rs/ci.yml?branch=main
-[workflow]: https://github.com/robertu94/libpressio-rs/actions/workflows/ci.yml?query=branch%3Amain
+[CI Status]: https://img.shields.io/github/actions/workflow/status/robertu94/libpressio-rs/ci.yml?branch=master
+[workflow]: https://github.com/robertu94/libpressio-rs/actions/workflows/ci.yml?query=branch%3Amaster
 
 [MSRV]: https://img.shields.io/badge/MSRV-1.85.0-blue
 [repo]: https://github.com/robertu94/libpressio-rs
@@ -12,7 +12,7 @@
 [Rust Doc Crate]: https://img.shields.io/docsrs/libpressio-sys
 [docs.rs]: https://docs.rs/libpressio-sys/
 
-[Rust Doc Main]: https://img.shields.io/badge/docs-main-blue
+[Rust Doc Master]: https://img.shields.io/badge/docs-master-blue
 [docs]: https://robertu94.github.io/libpressio-rs/libpressio_sys
 
 # libpressio-sys
