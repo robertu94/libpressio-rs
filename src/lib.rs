@@ -150,7 +150,7 @@ impl Pressio {
     pub fn get_compressor<S: AsRef<str>>(
         &mut self,
         id: S,
-    ) -> Result<PressioNonSendableCompressor, PressioError> {
+    ) -> Result<PressioCompressor, PressioError> {
         let id = id.as_ref();
         let id_cstr =
             CString::new(id).map_err(|err| PressioError::null_error(err, "compressor id"))?;
@@ -160,7 +160,7 @@ impl Pressio {
         let Some(ptr) = NonNull::new(ptr) else {
             return Err(self.get_error());
         };
-        Ok(PressioNonSendableCompressor {
+        Ok(PressioCompressor {
             ptr,
             _marker: PhantomData,
         })
@@ -190,7 +190,7 @@ impl Drop for Pressio {
     }
 }
 
-pub struct PressioNonSendableCompressor {
+pub struct PressioCompressor {
     // pressio_compressor is conservatively !Send and !Sync
     // - impl !Send from PhantomData<Rc>
     // - impl !Sync from PhantomData<Rc>
@@ -198,11 +198,9 @@ pub struct PressioNonSendableCompressor {
     _marker: PhantomData<Rc<()>>,
 }
 
-impl PressioNonSendableCompressor {
+impl PressioCompressor {
     pub fn try_into_sendable(self) -> Result<PressioSendableCompressor, (Self, PressioError)> {
-        fn check_is_sendable(
-            compressor: &PressioNonSendableCompressor,
-        ) -> Result<(), PressioError> {
+        fn check_is_sendable(compressor: &PressioCompressor) -> Result<(), PressioError> {
             let id = compressor.get_prefix()?;
             let config = compressor.get_configuration()?;
 
@@ -414,7 +412,7 @@ impl PressioNonSendableCompressor {
     }
 }
 
-impl Drop for PressioNonSendableCompressor {
+impl Drop for PressioCompressor {
     fn drop(&mut self) {
         unsafe {
             libpressio_sys::pressio_compressor_release(self.as_raw_mut());
@@ -425,22 +423,22 @@ impl Drop for PressioNonSendableCompressor {
 pub struct PressioSendableCompressor {
     // pressio_compressor is !Sync, and sometimes Send
     // - impl Send from below
-    // - impl !Sync from PressioNonSendableCompressor
+    // - impl !Sync from PressioCompressor
     // - check at construction that no compressor can be instantiated that
     //   would violate these properties
-    inner: PressioNonSendableCompressor,
+    inner: PressioCompressor,
 }
 
 unsafe impl Send for PressioSendableCompressor {}
 
 impl PressioSendableCompressor {
-    pub fn into_non_sendable(self) -> PressioNonSendableCompressor {
+    pub fn into_non_sendable(self) -> PressioCompressor {
         self.inner
     }
 }
 
 impl Deref for PressioSendableCompressor {
-    type Target = PressioNonSendableCompressor;
+    type Target = PressioCompressor;
 
     fn deref(&self) -> &Self::Target {
         &self.inner
@@ -1736,11 +1734,11 @@ mod tests {
     fn safe_works(
         ndarray_to_data: impl Fn(
             ndarray::ArrayD<f32>,
-            &mut PressioNonSendableCompressor,
+            &mut PressioCompressor,
             Box<
                 dyn FnOnce(
                     &PressioData,
-                    &mut PressioNonSendableCompressor,
+                    &mut PressioCompressor,
                 ) -> Result<(PressioData, PressioData), PressioError>,
             >,
         ) -> Result<(PressioData, PressioData), PressioError>,
