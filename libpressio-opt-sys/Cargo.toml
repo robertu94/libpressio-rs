@@ -25,4 +25,6 @@ mpi-stubs-sys = { workspace = true, optional = true }
 std-compat-sys = { workspace = true }
 
 [build-dependencies]
+bindgen = { workspace = true, features = ["runtime"] }
 cmake = { workspace = true }
+regex = { workspace = true }

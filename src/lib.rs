@@ -21,6 +21,11 @@ use thiserror::Error;
 
 static REGISTRATION: LazyLock<()> = LazyLock::new(|| unsafe {
     libpressio_sys::pressio_register_all();
+
+    #[cfg(feature = "opt")]
+    {
+        libpressio_opt_sys::libpressio_register_libpressio_opt();
+    }
 });
 
 #[derive(Debug, Clone, Error)]

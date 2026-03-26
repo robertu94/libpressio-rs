@@ -2,7 +2,12 @@ use std::{env, ffi::OsString, path::PathBuf};
 
 fn main() {
     println!("cargo::rerun-if-changed=build.rs");
+    println!("cargo::rerun-if-changed=wrapper.h");
     println!("cargo::rerun-if-changed=libpressio_opt");
+
+    let out_dir = env::var("OUT_DIR")
+        .map(PathBuf::from)
+        .expect("missing OUT_DIR");
 
     let mut cmake_prefix_path = OsString::new();
 
@@ -75,6 +80,77 @@ fn main() {
         "cargo::metadata=include={}",
         libpressio_opt_out.join("include").display()
     );
+
+    let cargo_callbacks = CargoCallBacksIngoreGeneratedFiles::new(["pressio_version.h"]);
+    let bindings = bindgen::Builder::default()
+        .clang_arg("-x")
+        .clang_arg("c++")
+        .clang_arg("-std=c++17")
+        .clang_arg(format!(
+            "-I{}",
+            libpressio_opt_out
+                .join("include")
+                .join("libpressio_opt")
+                .display()
+        ))
+        .header("wrapper.h")
+        .parse_callbacks(Box::new(cargo_callbacks))
+        .allowlist_function("libpressio_register_libpressio_opt")
+        .derive_copy(false)
+        .derive_debug(false)
+        .derive_default(false)
+        .derive_eq(false)
+        .derive_hash(false)
+        .derive_ord(false)
+        .derive_ord(false)
+        .derive_partialeq(false)
+        .derive_partialord(false)
+        // MSRV 1.85: must match the workspace rust-version
+        .rust_target(match bindgen::RustTarget::stable(85, 0) {
+            Ok(target) => target,
+            #[expect(clippy::panic)]
+            Err(err) => panic!("{err}"),
+        })
+        .generate()
+        .expect("Unable to generate bindings");
+
+    bindings
+        .write_to_file(out_dir.join("bindings.rs"))
+        .expect("Couldn't write bindings!");
+}
+
+#[derive(Debug)]
+struct CargoCallBacksIngoreGeneratedFiles {
+    cargo_callbacks: bindgen::CargoCallbacks,
+    files: std::vec::Vec<regex::Regex>,
+}
+
+impl CargoCallBacksIngoreGeneratedFiles {
+    fn new<'a, T>(files: T) -> Self
+    where
+        T: IntoIterator<Item = &'a str>,
+    {
+        Self {
+            cargo_callbacks: bindgen::CargoCallbacks::new(),
+            files: Vec::from_iter(files.into_iter().map(|v| regex::Regex::new(v).unwrap())),
+        }
+    }
+}
+
+impl bindgen::callbacks::ParseCallbacks for CargoCallBacksIngoreGeneratedFiles {
+    fn header_file(&self, filename: &str) {
+        if !self.files.iter().any(|f| f.is_match(filename)) {
+            self.cargo_callbacks.header_file(filename)
+        }
+    }
+    fn include_file(&self, filename: &str) {
+        if !self.files.iter().any(|f| f.is_match(filename)) {
+            self.cargo_callbacks.include_file(filename)
+        }
+    }
+    fn read_env_var(&self, filename: &str) {
+        self.cargo_callbacks.read_env_var(filename)
+    }
 }
 
 fn configure_cmake_tools(config: &mut cmake::Config) {
