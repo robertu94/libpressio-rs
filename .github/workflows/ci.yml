@@ -84,7 +84,8 @@ jobs:
       - name: Check the powerset
         run: |
           cargo hack check --all \
-            --feature-powerset --keep-going
+            --feature-powerset --keep-going \
+            --clean-per-run
 
   test:
     name: Test Suite
@@ -125,7 +126,8 @@ jobs:
         run: |
           cargo hack test --workspace \
             --no-fail-fast --feature-powerset --keep-going \
-            --release
+            --release \
+            --clean-per-run
 
   fmt:
     name: Rustfmt
@@ -187,6 +189,7 @@ jobs:
         run: |
           cargo hack clippy --all \
             --feature-powerset --keep-going \
+            --clean-per-run \
             -- -D warnings
 
       - name: Check the code style powerset
@@ -194,4 +197,5 @@ jobs:
         run: |
           cargo hack clippy --all \
             --feature-powerset --keep-going \
+            --clean-per-run \
             -- -D warnings -A unknown-lints -A clippy::multiple-crate-versions
