@@ -10,6 +10,7 @@ use std::{
     ops::{Deref, DerefMut},
     ptr::NonNull,
     rc::Rc,
+    sync::LazyLock,
 };
 
 use libpressio_sys::{
@@ -19,6 +20,10 @@ use libpressio_sys::{
 };
 use ndarray::{Array, ArrayBase, ArrayView, CowArray, Data, Dimension, IxDyn};
 use thiserror::Error;
+
+static REGISTRATION: LazyLock<()> = LazyLock::new(|| unsafe {
+    libpressio_sys::pressio_register_all();
+});
 
 #[derive(Debug, Clone, Error)]
 #[error("{message}")]
@@ -63,6 +68,8 @@ pub fn patch_version() -> u32 {
 }
 
 pub fn supported_compressors() -> Result<Vec<&'static str>, PressioError> {
+    LazyLock::force(&REGISTRATION);
+
     // Safety:
     // - pressio_supported_compressors is safe to call
     // - the returned pointer has 'static lifetime
@@ -79,6 +86,8 @@ pub fn supported_compressors() -> Result<Vec<&'static str>, PressioError> {
 }
 
 pub fn supported_io_modules() -> Result<Vec<&'static str>, PressioError> {
+    LazyLock::force(&REGISTRATION);
+
     // Safety:
     // - pressio_supported_io_modules is safe to call
     // - the returned pointer has 'static lifetime
@@ -94,6 +103,8 @@ pub fn supported_io_modules() -> Result<Vec<&'static str>, PressioError> {
 }
 
 pub fn supported_metrics() -> Result<Vec<&'static str>, PressioError> {
+    LazyLock::force(&REGISTRATION);
+
     // Safety:
     // - pressio_supported_metrics is safe to call
     // - the returned pointer has 'static lifetime
@@ -134,6 +145,8 @@ unsafe impl Send for Pressio {}
 
 impl Pressio {
     pub fn new() -> Result<Pressio, PressioError> {
+        LazyLock::force(&REGISTRATION);
+
         let library: *mut libpressio_sys::pressio;
         unsafe {
             library = libpressio_sys::pressio_instance();
