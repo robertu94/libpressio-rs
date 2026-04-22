@@ -123,8 +123,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .derive_ord(false)
         .derive_partialeq(false)
         .derive_partialord(false)
-        // MSRV 1.85: must match the workspace rust-version
-        .rust_target(match bindgen::RustTarget::stable(85, 0) {
+        // MSRV 1.88: must match the workspace rust-version
+        .rust_target(match bindgen::RustTarget::stable(88, 0) {
             Ok(target) => target,
             #[expect(clippy::panic)]
             Err(err) => panic!("{err}"),

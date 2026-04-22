@@ -6,7 +6,7 @@ members = ["libpressio-sys", "std-compat-sys"]
 edition = "2024"
 authors = ["Robert Underwood <rr.underwood94@gmail.com>", "Juniper Tyree <juniper.tyree@helsinki.fi>"]
 repository = "https://github.com/robertu94/libpressio-rs"
-rust-version = "1.85"  # keep in sync with bindgen MSRV
+rust-version = "1.88"  # keep in sync with bindgen MSRV
 
 [workspace.dependencies]
 # workspace-internal crates
