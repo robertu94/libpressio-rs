@@ -51,9 +51,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .expect("missing sol2 dependency");
         cmake_prefix_path.push(";");
         cmake_prefix_path.push(sol2_root);
-        let lua_root = env::var("DEP_LUA_ROOT")
+        let lua_include = env::var("DEP_LUA_INCLUDE")
             .map(PathBuf::from)
             .expect("missing lua dependency");
+        let lua_root = lua_include.parent().expect("missing lua dependency root");
+        assert_eq!(lua_include, lua_root.join("include"));
         cmake_prefix_path.push(";");
         cmake_prefix_path.push(lua_root);
         config.define("LIBPRESSIO_HAS_LUA", "ON");

@@ -8,5 +8,5 @@ include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 extern crate bzip2_sys as _;
 
 #[cfg(feature = "lua")]
-// ensure that lua-sys is linked
-extern crate lua_sys as _;
+// ensure that mlua-sys is linked
+extern crate mlua_sys as _;
