@@ -90,12 +90,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     println!("cargo::rustc-link-lib=static=libpressio");
 
-    if cfg!(feature = "openmp") {
-        if let Some(links) = env::var_os("DEP_OPENMP_CARGO_LINK_INSTRUCTIONS") {
-            for link in env::split_paths(&links) {
-                if !link.as_os_str().is_empty() {
-                    println!("cargo::{}", link.display());
-                }
+    if cfg!(feature = "openmp")
+        && let Some(links) = env::var_os("DEP_OPENMP_CARGO_LINK_INSTRUCTIONS")
+    {
+        for link in env::split_paths(&links) {
+            if !link.as_os_str().is_empty() {
+                println!("cargo::{}", link.display());
             }
         }
     }
