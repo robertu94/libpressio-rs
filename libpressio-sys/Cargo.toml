@@ -26,12 +26,12 @@ exclude = [
 
 [features]
 bzip2 = ["bzip2-sys"]
-lua = ["lua-sys", "sol2-sys"]
+lua = ["mlua-sys", "sol2-sys"]
 openmp = ["openmp-sys"]
 
 [dependencies]
 bzip2-sys = { workspace = true, features = ["static"], optional = true }
-lua-sys = { workspace = true, optional = true }
+mlua-sys = { workspace = true, features = ["lua54", "vendored"], optional = true }
 openmp-sys = { workspace = true, optional = true }
 sol2-sys = { workspace = true, optional = true }
 std-compat-sys = { workspace = true }

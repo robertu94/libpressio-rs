@@ -51,9 +51,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .expect("missing sol2 dependency");
         cmake_prefix_path.push(";");
         cmake_prefix_path.push(sol2_root);
-        let lua_root = env::var("DEP_LUA_ROOT")
+        let lua_include = env::var("DEP_LUA_INCLUDE")
             .map(PathBuf::from)
             .expect("missing lua dependency");
+        let lua_root = lua_include.parent().expect("missing lua dependency root");
+        assert_eq!(lua_include, lua_root.join("include"));
         cmake_prefix_path.push(";");
         cmake_prefix_path.push(lua_root);
         config.define("LIBPRESSIO_HAS_LUA", "ON");
@@ -88,12 +90,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     println!("cargo::rustc-link-lib=static=libpressio");
 
-    if cfg!(feature = "openmp") {
-        if let Some(links) = env::var_os("DEP_OPENMP_CARGO_LINK_INSTRUCTIONS") {
-            for link in env::split_paths(&links) {
-                if !link.as_os_str().is_empty() {
-                    println!("cargo::{}", link.display());
-                }
+    if cfg!(feature = "openmp")
+        && let Some(links) = env::var_os("DEP_OPENMP_CARGO_LINK_INSTRUCTIONS")
+    {
+        for link in env::split_paths(&links) {
+            if !link.as_os_str().is_empty() {
+                println!("cargo::{}", link.display());
             }
         }
     }
@@ -121,8 +123,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .derive_ord(false)
         .derive_partialeq(false)
         .derive_partialord(false)
-        // MSRV 1.85: must match the workspace rust-version
-        .rust_target(match bindgen::RustTarget::stable(85, 0) {
+        // MSRV 1.88: must match the workspace rust-version
+        .rust_target(match bindgen::RustTarget::stable(88, 0) {
             Ok(target) => target,
             #[expect(clippy::panic)]
             Err(err) => panic!("{err}"),

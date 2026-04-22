@@ -1659,13 +1659,11 @@ impl Clone for PressioOptions {
 
 impl std::fmt::Display for PressioOptions {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let msg = unsafe {
-            let ptr: *mut c_char = libpressio_sys::pressio_options_to_string(self.as_raw());
-            let s = CStr::from_ptr(ptr).to_str().unwrap().to_string();
-            libc::free(ptr.cast());
-            s
-        };
-        write!(f, "{}", msg)
+        let ptr: *mut c_char = unsafe { libpressio_sys::pressio_options_to_string(self.as_raw()) };
+        let msg = unsafe { CStr::from_ptr(ptr).to_str().map_err(|_| std::fmt::Error) };
+        let res = msg.and_then(|msg| f.write_str(msg));
+        unsafe { libc::free(ptr.cast()) };
+        res
     }
 }
 
